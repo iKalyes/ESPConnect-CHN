@@ -259,27 +259,51 @@
               </div>
               <div v-else class="partition-view">
                 <div class="partition-map">
-                  <div
+                  <VTooltip
                     v-for="segment in partitionSegments"
                     :key="segment.key"
-                    :class="[
-                      'partition-segment',
-                      {
-                        'partition-segment--unused': segment.isUnused,
-                        'partition-segment--reserved': segment.isReserved
-                      }
-                    ]"
-                    :style="{
-                      width: segment.width,
-                      backgroundColor: segment.color,
-                      backgroundImage: segment.backgroundImage
-                    }"
+                    location="top"
+                    :open-delay="120"
+                    transition="fade-transition"
                   >
-                    <span class="partition-label">{{ segment.label || 'Unnamed' }}</span>
-                    <span class="partition-meta">
-                      {{ segment.sizeText }} — {{ segment.offsetHex }}
-                    </span>
-                  </div>
+                    <template #activator="{ props }">
+                      <div
+                        v-bind="props"
+                        :class="[
+                          'partition-segment',
+                          {
+                            'partition-segment--unused': segment.isUnused,
+                            'partition-segment--reserved': segment.isReserved
+                          }
+                        ]"
+                        :style="{
+                          width: segment.width,
+                          flexBasis: segment.width,
+                          backgroundColor: segment.color,
+                          backgroundImage: segment.backgroundImage || undefined
+                        }"
+                      >
+                        <span v-if="segment.showLabel" class="partition-label">
+                          {{ segment.label || 'Unnamed' }}
+                        </span>
+                        <span v-if="segment.showMeta" class="partition-meta">
+                          {{ segment.sizeText }} - {{ segment.offsetHex }}
+                        </span>
+                      </div>
+                    </template>
+                    <template #text>
+                      <div class="partition-tooltip">
+                        <div class="partition-tooltip__title">{{ segment.label || 'Unnamed' }}</div>
+                        <div
+                          v-for="line in segment.tooltipLines"
+                          :key="line"
+                          class="partition-tooltip__line"
+                        >
+                          {{ line }}
+                        </div>
+                      </div>
+                    </template>
+                  </VTooltip>
                 </div>
 
                 <v-table density="comfortable" class="mt-4">
@@ -293,8 +317,23 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="entry in formattedPartitions" :key="entry.offset">
-                      <td>{{ entry.label || '—' }}</td>
+                    <tr
+                      v-for="entry in formattedPartitions"
+                      :key="entry.offset"
+                      class="partition-table-row"
+                    >
+                      <td>
+                        <div class="partition-table-label">
+                          <span
+                            class="partition-color-pip"
+                            :style="{
+                              backgroundColor: entry.color,
+                              backgroundImage: entry.backgroundImage || undefined
+                            }"
+                          ></span>
+                          <span>{{ entry.label || '—' }}</span>
+                        </div>
+                      </td>
                       <td>{{ entry.typeHex }}</td>
                       <td>{{ entry.subtypeHex }}</td>
                       <td>{{ entry.offsetHex }}</td>
@@ -764,9 +803,9 @@ const partitionPalette = [
   '#ffc6ff',
 ];
 
-const UNUSED_SEGMENT_COLOR = '#374151';
+const UNUSED_SEGMENT_COLOR = '#c62828';
 const UNUSED_SEGMENT_PATTERN =
-  'repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0, rgba(255, 255, 255, 0.28) 8px, rgba(255, 255, 255, 0.08) 8px, rgba(255, 255, 255, 0.08) 16px)';
+  'repeating-linear-gradient(270deg, rgba(248, 113, 113, 0.65) 0px, rgba(248, 113, 113, 0.65) 12px, rgba(220, 38, 38, 0.65) 12px, rgba(220, 38, 38, 0.65) 24px)';
 
 const RESERVED_SEGMENTS = [
   {
@@ -881,45 +920,64 @@ const partitionSegments = computed(() => {
   let partitionIndex = 0;
 
   return sizedSegments.map(segment => {
-    const widthPercent = Math.max(2, (segment.size / totalSpan) * 100);
+    const widthPercent = (segment.size / totalSpan) * 100;
+    const widthValue = Number.isFinite(widthPercent) ? Math.max(widthPercent, 0) : 0;
+    const width = `${widthValue.toFixed(4)}%`;
+    const offsetHex = `0x${segment.offset.toString(16).toUpperCase()}`;
+    const endOffset = segment.offset + segment.size;
+    const endHex = `0x${endOffset.toString(16).toUpperCase()}`;
+    const sizeText = formatBytes(segment.size) ?? `${segment.size} bytes`;
+
+    const showLabel = widthValue >= 6;
+    const showMeta = widthValue >= 12 && segment.kind === 'partition';
 
     if (segment.kind === 'unused') {
-      const offsetHex = `0x${segment.offset.toString(16).toUpperCase()}`;
-      const sizeText = formatBytes(segment.size) ?? `${segment.size} bytes`;
       return {
         key: segment.key,
-        label: 'Unused',
-        width: `${widthPercent}%`,
+        label: 'Unused Flash',
+        width,
         color: UNUSED_SEGMENT_COLOR,
         backgroundImage: UNUSED_SEGMENT_PATTERN,
         sizeText,
         offsetHex,
-        typeHex: '—',
-        subtypeHex: '—',
+        endHex,
+        offset: segment.offset,
+        size: segment.size,
+        typeHex: 'N/A',
+        subtypeHex: 'N/A',
         isUnused: true,
         isReserved: false,
+        showLabel,
+        showMeta: false,
+        tooltipLines: [`Size: ${sizeText}`, `Start: ${offsetHex}`, `End: ${endHex}`],
       };
     }
 
     if (segment.kind === 'reserved') {
-      const offsetHex = `0x${segment.offset.toString(16).toUpperCase()}`;
-      const sizeText = formatBytes(segment.size) ?? `${segment.size} bytes`;
       return {
         key: segment.key,
         label: segment.label,
-        width: `${widthPercent}%`,
+        width,
         color: segment.color,
         backgroundImage: null,
         sizeText,
         offsetHex,
-        typeHex: '—',
-        subtypeHex: '—',
+        endHex,
+        offset: segment.offset,
+        size: segment.size,
+        typeHex: 'N/A',
+        subtypeHex: 'N/A',
         isUnused: false,
         isReserved: true,
+        showLabel,
+        showMeta: widthValue >= 10,
+        tooltipLines: [`Size: ${sizeText}`, `Start: ${offsetHex}`, `End: ${endHex}`],
       };
     }
 
     const entry = segment.entry;
+    const typeHex = `0x${entry.type.toString(16).toUpperCase()}`;
+    const subtypeHex = `0x${entry.subtype.toString(16).toUpperCase()}`;
     const normalizedLabel = (entry.label || '')
       .trim()
       .toLowerCase()
@@ -931,32 +989,69 @@ const partitionSegments = computed(() => {
       partitionTypeColors[entry.type] ||
       partitionPalette[partitionIndex % partitionPalette.length];
     partitionIndex += 1;
-
     return {
       key: segment.key,
       label: entry.label || `type 0x${entry.type.toString(16)}`,
-      width: `${widthPercent}%`,
+      width,
       color,
       backgroundImage: null,
-      sizeText: formatBytes(entry.size) ?? `${entry.size} bytes`,
-      offsetHex: `0x${entry.offset.toString(16).toUpperCase()}`,
-      typeHex: `0x${entry.type.toString(16).toUpperCase()}`,
-      subtypeHex: `0x${entry.subtype.toString(16).toUpperCase()}`,
+      sizeText,
+      offsetHex,
+      endHex,
+      offset: entry.offset,
+      size: entry.size,
+      typeHex,
+      subtypeHex,
       isUnused: false,
       isReserved: false,
+      showLabel,
+      showMeta,
+      tooltipLines: [
+        `Size: ${sizeText}`,
+        `Start: ${offsetHex}`,
+        `End: ${endHex}`,
+        `Type/Subtype: ${typeHex} / ${subtypeHex}`,
+      ],
     };
   });
 });
 
-const formattedPartitions = computed(() =>
-  partitionTable.value.map(entry => ({
-    ...entry,
-    typeHex: `0x${entry.type.toString(16).toUpperCase()}`,
-    subtypeHex: `0x${entry.subtype.toString(16).toUpperCase()}`,
-    offsetHex: `0x${entry.offset.toString(16).toUpperCase()}`,
-    sizeText: formatBytes(entry.size) ?? `${entry.size} bytes`,
-  }))
-);
+const formattedPartitions = computed(() => {
+  const segmentByOffset = new Map();
+  for (const segment of partitionSegments.value) {
+    if (!segment.isUnused && !segment.isReserved) {
+      segmentByOffset.set(segment.offset, segment);
+    }
+  }
+
+  return partitionTable.value.map((entry, index) => {
+    const segment = segmentByOffset.get(entry.offset);
+    const typeHex = `0x${entry.type.toString(16).toUpperCase()}`;
+    const subtypeHex = `0x${entry.subtype.toString(16).toUpperCase()}`;
+    const offsetHex = `0x${entry.offset.toString(16).toUpperCase()}`;
+    const sizeText = formatBytes(entry.size) ?? `${entry.size} bytes`;
+    const fallbackColor =
+      partitionColorOverrides[
+        (entry.label || '')
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '')
+      ] ||
+      partitionTypeColors[entry.type] ||
+      partitionPalette[index % partitionPalette.length];
+
+    return {
+      ...entry,
+      typeHex,
+      subtypeHex,
+      offsetHex,
+      sizeText,
+      color: segment?.color ?? fallbackColor,
+      backgroundImage: segment?.backgroundImage ?? null,
+    };
+  });
+});
 
 const statusLabel = computed(() =>
   connected.value ? statusDetails.value : 'No device connected. Choose a port to begin.'
@@ -1437,20 +1532,25 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--v-theme-on-surface) 12%, transparent);
   background: color-mix(in srgb, var(--v-theme-surface) 90%, transparent);
+  flex-wrap: nowrap;
+  min-height: 140px;
 }
 
 .partition-segment {
   position: relative;
-  padding: 14px 16px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
+  text-align: center;
   gap: 6px;
   color: rgba(255, 255, 255, 0.95);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-  min-width: 120px;
+  min-width: 0;
   box-sizing: border-box;
   border-left: 1px solid rgba(255, 255, 255, 0.4);
+  flex: 0 0 auto;
 }
 
 .partition-segment:first-child {
@@ -1459,6 +1559,8 @@ onBeforeUnmount(() => {
 
 .partition-segment--unused {
   color: rgba(255, 255, 255, 0.88);
+  background-repeat: repeat;
+  background-size: 28px 28px;
 }
 
 .partition-segment--unused .partition-meta {
@@ -1471,6 +1573,42 @@ onBeforeUnmount(() => {
 
 .partition-segment--reserved .partition-meta {
   opacity: 0.85;
+}
+
+.partition-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.partition-tooltip__title {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.partition-tooltip__line {
+  font-size: 0.78rem;
+  opacity: 0.85;
+}
+
+.partition-table-row td {
+  vertical-align: middle;
+}
+
+.partition-table-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.partition-color-pip {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-size: 18px 18px;
+  background-repeat: repeat;
 }
 
 .partition-label {
