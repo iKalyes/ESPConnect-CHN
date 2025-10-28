@@ -4,7 +4,7 @@
       <v-container class="py-10" max-width="1100">
         <v-card elevation="8" class="pa-6">
           <v-card-title class="d-flex align-center pa-0 mb-2">
-            <div class="text-h5 font-weight-semibold">ESP32 Web Flasher</div>
+            <div class="text-h5 font-weight-semibold">ESPConnect</div>
             <v-spacer />
             <v-btn
               :title="`Switch to ${isDarkTheme ? 'light' : 'dark'} theme`"
