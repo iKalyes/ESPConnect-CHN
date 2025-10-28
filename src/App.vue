@@ -134,7 +134,7 @@
             </v-card-title>
             <v-card-text>
               <p class="text-body-2">
-                We couldnΓÇÖt communicate with the board. Try putting your ESP32 into bootloader mode:
+                We couldn't communicate with the board. Try putting your ESP32 into bootloader mode:
               </p>
               <ol class="text-body-2 ps-4">
                 <li>Hold the <strong>BOOT</strong> (GPIO0) button.</li>
@@ -319,8 +319,8 @@ const USB_PRODUCT_NAMES = {
 };
 
 const PACKAGE_FORM_FACTORS = {
-  QFN56: '56-pin QFN (7 mm ├ù 7 mm)',
-  QFN32: '32-pin QFN (5 mm ├ù 5 mm)',
+  QFN56: '56-pin QFN (7 mm x 7 mm)',
+  QFN32: '32-pin QFN (5 mm x 5 mm)',
   QFN28: '28-pin QFN',
   QFN24: '24-pin QFN',
   LGA56: '56-pad LGA module footprint',
@@ -341,7 +341,6 @@ const FACT_ICONS = {
   'USB Bridge': 'mdi-usb-port',
   'Connection Baud': 'mdi-speedometer',
   'eFuse Block Version': 'mdi-shield-key',
-  'Partition Table': 'mdi-table',
 };
 
 function formatBytes(bytes) {
@@ -381,13 +380,11 @@ function formatUsbBridge(info) {
   const vendorName = USB_VENDOR_NAMES[info.usbVendorId] ?? `Vendor ${vendorHex}`;
   const productKey =
     typeof info.usbProductId === 'number'
-      ? `${info.usbVendorId.toString(16).toUpperCase()}:${info.usbProductId
-          .toString(16)
-          .toUpperCase()}`
+      ? `${info.usbVendorId.toString(16).toUpperCase()}:${info.usbProductId.toString(16).toUpperCase()}`
       : null;
   const productName = productKey ? USB_PRODUCT_NAMES[productKey] : null;
   if (productName && productHex) {
-    return `${vendorName} ΓÇö ${productName} (${productHex})`;
+    return `${vendorName} - ${productName} (${productHex})`;
   }
   if (productHex) {
     return `${vendorName} (${productHex})`;
@@ -706,9 +703,9 @@ const partitionSegments = computed(() => {
     const widthValue = Number.isFinite(widthPercent) ? Math.max(widthPercent, 0) : 0;
     const width = `${widthValue.toFixed(4)}%`;
     const offsetHex = `0x${segment.offset.toString(16).toUpperCase()}`;
+    const sizeText = formatBytes(segment.size) ?? `${segment.size} bytes`;
     const endOffset = segment.offset + segment.size;
     const endHex = `0x${endOffset.toString(16).toUpperCase()}`;
-    const sizeText = formatBytes(segment.size) ?? `${segment.size} bytes`;
 
     const showLabel = widthValue >= 6;
     const showMeta = widthValue >= 12 && segment.kind === 'partition';
@@ -1023,7 +1020,7 @@ async function connect() {
       );
       if (deviceName || formattedCapacity) {
         const detail = formattedCapacity
-          ? `${formattedCapacity}${deviceName ? ` ΓÇö ${deviceName}` : ''}`
+          ? `${formattedCapacity}${deviceName ? ` - ${deviceName}` : ''}`
           : deviceName;
         pushFact('Flash Device', detail || deviceHex);
       } else {
@@ -1042,18 +1039,6 @@ async function connect() {
 
     const partitions = await readPartitionTable(loader.value);
     partitionTable.value = partitions;
-    if (partitions.length) {
-      const partitionPreview = partitions.slice(0, 3).map(p => {
-        const label = p.label || `type 0x${p.type.toString(16)}`;
-        const offsetHex = `0x${p.offset.toString(16).toUpperCase()}`;
-        const sizeText = formatBytes(p.size) ?? `${p.size} bytes`;
-        return `${label} @ ${offsetHex} (${sizeText})`;
-      });
-      const extraCount = partitions.length - partitionPreview.length;
-      const partitionSummary =
-        partitionPreview.join(', ') + (extraCount > 0 ? `, ΓÇª (+${extraCount} more)` : '');
-      pushFact('Partition Table', partitionSummary);
-    }
 
     if (portDetails) {
       pushFact('USB Bridge', formatUsbBridge(portDetails));
