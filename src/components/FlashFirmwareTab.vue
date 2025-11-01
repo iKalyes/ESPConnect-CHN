@@ -457,7 +457,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps({
   flashOffset: {
@@ -617,6 +617,7 @@ function handlePresetChange(value) {
 
 const selectedRegisterAddress = ref(null);
 const selectedRegisterInfo = ref(null);
+const integrityPartition = computed(() => props.integrityPartition ?? null);
 
 function handleIntegrityPartitionSelect(value) {
   emit('update:integrityPartition', value);
