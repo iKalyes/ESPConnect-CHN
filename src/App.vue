@@ -3,9 +3,15 @@
     <v-main>
       <v-container class="py-10" max-width="1100">
         <v-card elevation="8" class="pa-6">
-          <v-card-title class="d-flex align-center pa-0 mb-2">
-            <div class="text-h5 font-weight-semibold">ESPConnect</div>
+          <v-card-title class="d-flex align-center pa-0 mb-1">
+            <div class="app-title text-h5 font-weight-semibold">
+              ESPConnect
+              <span class="app-version">v{{ APP_VERSION }}</span>
+            </div>
           </v-card-title>
+          <v-card-subtitle class="pa-0 text-body-2 text-medium-emphasis mb-3">
+            {{ APP_TAGLINE }}
+          </v-card-subtitle>
 
           <v-system-bar class="status-bar mb-4" color="primary" :height="64" dark window>
             <div class="status-actions">
@@ -269,6 +275,9 @@ import FlashFirmwareTab from './components/FlashFirmwareTab.vue';
 import PartitionsTab from './components/PartitionsTab.vue';
 import SessionLogTab from './components/SessionLogTab.vue';
 import SerialMonitorTab from './components/SerialMonitorTab.vue';
+
+const APP_VERSION = '0.1';
+const APP_TAGLINE = 'Flash, back up, and troubleshoot your ESP32 straight from the browser.';
 
 const SUPPORTED_VENDORS = [
   { usbVendorId: 0x303a },
@@ -2378,6 +2387,18 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.app-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.app-version {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--v-theme-primary) 75%, var(--v-theme-on-surface) 25%);
+}
+
 .status-bar {
   border-radius: 12px;
   padding-inline: 12px;
