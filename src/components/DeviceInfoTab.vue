@@ -52,9 +52,9 @@
 
                   <div class="summary-chips">
                     <template v-if="hasFeatures">
-                      <v-chip v-for="feature in featurePreview" :key="feature" class="summary-chip" size="small"
+                      <v-chip v-for="feature in featurePreview" :key="feature" class="summary-chip" size="large"
                         variant="flat">
-                        <v-icon size="14" start>mdi-check-circle</v-icon>
+                        <v-icon start>mdi-check-circle</v-icon>
                         {{ feature }}
                       </v-chip>
                       <v-chip v-if="details.features.length > featurePreview.length"
