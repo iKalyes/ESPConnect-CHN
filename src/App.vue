@@ -924,7 +924,7 @@ function detectActiveOtaSlot(otadata, otaEntries) {
   for (let index = 0; index < entryCount; index += 1) {
     const base = index * OTA_SELECT_ENTRY_SIZE;
     const seq = readUint32LE(otadata, base);
-    if (seq === 0 || seq === 0xffffffff || Number.isNaN(seq)) {
+    if (!seq || Number.isNaN(seq) || seq === 0xffffffff || seq === 0xfffffffe || seq >= 0x80000000) {
       continue;
     }
     const slotIndex = (seq - 1) % otaCount;
@@ -1098,13 +1098,38 @@ async function analyzeAppPartitions(loaderInstance, partitions) {
     results.push(appInfo);
   }
 
+  let resolvedSlotId = activeSlotId;
+  let resolvedSummary = activeSummary;
+  const activeInfoCandidate = resolvedSlotId
+    ? results.find(info => info.slotLabel === resolvedSlotId)
+    : null;
+
+  if (!activeInfoCandidate || !activeInfoCandidate.valid) {
+    const fallbackCandidates = [
+      results.find(info => info.valid && info.slotLabel === 'factory'),
+      results.find(info => info.valid && info.slotLabel.startsWith('ota_')),
+      results.find(info => info.valid),
+    ].filter(Boolean);
+    const fallbackInfo = fallbackCandidates.length ? fallbackCandidates[0] : null;
+    if (fallbackInfo) {
+      resolvedSlotId = fallbackInfo.slotLabel;
+      resolvedSummary =
+        activeInfoCandidate && !activeInfoCandidate.valid
+          ? `Active slot ${activeInfoCandidate.slotLabel} invalid. Using ${fallbackInfo.slotLabel}.`
+          : `Active slot inferred: ${fallbackInfo.slotLabel}.`;
+    } else if (activeInfoCandidate && !activeInfoCandidate.valid) {
+      resolvedSlotId = null;
+      resolvedSummary = 'Active slot invalid.';
+    }
+  }
+
   for (const info of results) {
-    info.isActive = activeSlotId ? info.slotLabel === activeSlotId : false;
+    info.isActive = resolvedSlotId ? info.slotLabel === resolvedSlotId : false;
   }
 
   appPartitions.value = results;
-  activeAppSlotId.value = activeSlotId;
-  appActiveSummary.value = activeSummary;
+  activeAppSlotId.value = resolvedSlotId;
+  appActiveSummary.value = resolvedSummary;
   appMetadataLoaded.value = true;
 }
 
