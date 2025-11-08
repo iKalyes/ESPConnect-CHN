@@ -77,7 +77,7 @@
             </v-window-item>
 
             <v-window-item value="spiffs">
-              <SpiffsManagerTab v-if="connected" :partitions="spiffsPartitions"
+              <FilesystemManagerTab v-if="connected" :partitions="spiffsPartitions"
                 :selected-partition-id="spiffsState.selectedId" :files="spiffsState.files"
                 :status="spiffsState.status" :loading="spiffsState.loading" :busy="spiffsState.busy"
                 :saving="spiffsState.saving" :read-only="spiffsState.readOnly"
@@ -96,7 +96,7 @@
             </v-window-item>
 
             <v-window-item value="littlefs">
-              <SpiffsManagerTab v-if="connected && littleFsAvailable" :partitions="littleFsPartitions"
+              <FilesystemManagerTab v-if="connected && littleFsAvailable" :partitions="littleFsPartitions"
                 :selected-partition-id="littlefsState.selectedId" :files="littlefsState.files"
                 :status="littlefsState.status" :loading="littlefsState.loading" :busy="littlefsState.busy"
                 :saving="littlefsState.saving" :read-only="littlefsState.readOnly"
@@ -444,7 +444,7 @@ import { useTheme } from 'vuetify';
 import DeviceInfoTab from './components/DeviceInfoTab.vue';
 import FlashFirmwareTab from './components/FlashFirmwareTab.vue';
 import AppsTab from './components/AppsTab.vue';
-import SpiffsManagerTab from './components/SpiffsManagerTab.vue';
+import FilesystemManagerTab from './components/FilesystemManagerTab.vue';
 import PartitionsTab from './components/PartitionsTab.vue';
 import SessionLogTab from './components/SessionLogTab.vue';
 import SerialMonitorTab from './components/SerialMonitorTab.vue';
