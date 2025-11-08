@@ -169,14 +169,25 @@
               <td><code>{{ file.name }}</code></td>
               <td>{{ formatSize(file.size) }}</td>
               <td>
-                <v-btn
-                  size="small"
-                  variant="text"
-                  color="primary"
-                  :disabled="loading || busy || saving || readOnly"
-                  @click="emit('download-file', file.name)"
-                >
-                  <v-icon start size="16">mdi-download</v-icon>
+              <v-btn
+                size="small"
+                variant="text"
+                color="info"
+                v-if="isViewable(file.name)"
+                :disabled="loading || busy || saving || readOnly"
+                @click="emit('view-file', file.name)"
+              >
+                <v-icon start size="16">mdi-eye</v-icon>
+                View
+              </v-btn>
+              <v-btn
+                size="small"
+                variant="text"
+                color="primary"
+                :disabled="loading || busy || saving || readOnly"
+                @click="emit('download-file', file.name)"
+              >
+                <v-icon start size="16">mdi-download</v-icon>
                   Download
                 </v-btn>
                 <v-btn
@@ -254,6 +265,10 @@ const props = defineProps({
       freeBytes: 0,
     }),
   },
+  isFileViewable: {
+    type: Function,
+    default: () => false,
+  },
 });
 
 const emit = defineEmits([
@@ -262,6 +277,7 @@ const emit = defineEmits([
   'backup',
   'restore',
   'download-file',
+  'view-file',
   'upload-file',
   'delete-file',
   'format',
@@ -300,10 +316,17 @@ function handleRestoreFile(event) {
 }
 
 function formatSize(size) {
-  if (!Number.isFinite(size)) return '—';
+  if (!Number.isFinite(size)) return '-';
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function isViewable(name) {
+  if (typeof props.isFileViewable !== 'function') {
+    return false;
+  }
+  return Boolean(props.isFileViewable(name));
 }
 </script>
 

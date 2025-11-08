@@ -83,11 +83,11 @@
                 :read-only-reason="spiffsState.readOnlyReason" :dirty="spiffsState.dirty"
                 :backup-done="spiffsState.backupDone" :error="spiffsState.error"
                 :has-partition="hasSpiffsPartitionSelected" :has-client="Boolean(spiffsState.client)"
-                :usage="spiffsState.usage"
+                :usage="spiffsState.usage" :is-file-viewable="isViewableSpiffsFile"
                 @select-partition="handleSelectSpiffsPartition" @refresh="handleRefreshSpiffs"
                 @backup="handleSpiffsBackup" @restore="handleSpiffsRestore" @download-file="handleSpiffsDownloadFile"
-                @upload-file="handleSpiffsUpload" @delete-file="handleSpiffsDelete" @format="handleSpiffsFormat"
-                @save="handleSpiffsSave" />
+                @view-file="handleSpiffsView" @upload-file="handleSpiffsUpload" @delete-file="handleSpiffsDelete"
+                @format="handleSpiffsFormat" @save="handleSpiffsSave" />
             </v-window-item>
 
             <v-window-item value="apps">
@@ -263,6 +263,34 @@
             </v-card-actions>
           </v-card>
         </v-dialog>
+
+        <v-dialog :model-value="spiffsViewerDialog.visible" max-width="900" scrollable
+          @update:model-value="value => { if (!value) closeSpiffsViewer(); }">
+          <v-card>
+            <v-card-title class="text-h6 d-flex align-center">
+              <v-icon start>mdi-eye</v-icon>
+              {{ spiffsViewerDialog.name || 'Preview' }}
+            </v-card-title>
+            <v-card-text>
+              <v-progress-linear v-if="spiffsViewerDialog.loading" indeterminate color="primary" class="mb-4" />
+              <v-alert v-else-if="spiffsViewerDialog.error" type="error" variant="tonal" border="start" class="mb-4">
+                {{ spiffsViewerDialog.error }}
+              </v-alert>
+              <pre v-else class="spiffs-viewer__content">{{ spiffsViewerDialog.content }}</pre>
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn variant="text" @click="closeSpiffsViewer">
+                Close
+              </v-btn>
+              <v-btn color="primary" variant="tonal" :disabled="!spiffsViewerDialog.name"
+                @click="handleSpiffsDownloadFile(spiffsViewerDialog.name)">
+                <v-icon start>mdi-download</v-icon>
+                Download
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
       </v-container>
     </v-main>
   </v-app>
@@ -297,6 +325,26 @@ const DEFAULT_ROM_BAUD = 115200;
 const DEFAULT_FLASH_BAUD = 921600;
 const MONITOR_BAUD = 115200;
 const DEBUG_SERIAL = false;
+const VIEWABLE_SPIFFS_EXTENSIONS = [
+  'txt',
+  'log',
+  'json',
+  'csv',
+  'ini',
+  'cfg',
+  'conf',
+  'htm',
+  'html',
+  'md',
+  'js',
+  'ts',
+  'css',
+  'xml',
+  'yaml',
+  'yml',
+];
+const SPIFFS_VIEWER_MAX_BYTES = 128 * 1024; // 128 KB previews
+const SPIFFS_VIEWER_DECODER = new TextDecoder('utf-8', { fatal: false, ignoreBOM: true });
 
 const PACKAGE_LABELS = {
   ESP32: pkgVersion =>
@@ -678,6 +726,7 @@ function resetSpiffsState() {
     usedBytes: 0,
     freeBytes: 0,
   };
+  closeSpiffsViewer();
 }
 
 function updateSpiffsUsage() {
@@ -917,6 +966,52 @@ async function handleSpiffsDownloadFile(name) {
   } catch (error) {
     spiffsState.error = formatErrorMessage(error);
   }
+}
+
+function isViewableSpiffsFile(name = '') {
+  if (!name) {
+    return false;
+  }
+  const dotIndex = name.lastIndexOf('.');
+  if (dotIndex === -1) {
+    return false;
+  }
+  const ext = name.slice(dotIndex + 1).toLowerCase();
+  return VIEWABLE_SPIFFS_EXTENSIONS.includes(ext);
+}
+
+async function handleSpiffsView(name) {
+  if (!spiffsState.client) return;
+  if (!isViewableSpiffsFile(name)) {
+    spiffsState.status = 'This file type cannot be previewed. Download it instead.';
+    return;
+  }
+  spiffsViewerDialog.visible = true;
+  spiffsViewerDialog.name = name;
+  spiffsViewerDialog.loading = true;
+  spiffsViewerDialog.error = null;
+  spiffsViewerDialog.content = '';
+  try {
+    const data = await spiffsState.client.read(name);
+    if (data.length > SPIFFS_VIEWER_MAX_BYTES) {
+      throw new Error(
+        `File too large to preview (limit ${formatBytes(SPIFFS_VIEWER_MAX_BYTES) ?? SPIFFS_VIEWER_MAX_BYTES} bytes).`,
+      );
+    }
+    spiffsViewerDialog.content = SPIFFS_VIEWER_DECODER.decode(data);
+  } catch (error) {
+    spiffsViewerDialog.error = formatErrorMessage(error);
+  } finally {
+    spiffsViewerDialog.loading = false;
+  }
+}
+
+function closeSpiffsViewer() {
+  spiffsViewerDialog.visible = false;
+  spiffsViewerDialog.name = '';
+  spiffsViewerDialog.content = '';
+  spiffsViewerDialog.error = null;
+  spiffsViewerDialog.loading = false;
 }
 
 function cancelSpiffsBackup() {
@@ -1291,6 +1386,13 @@ const spiffsRestoreDialog = reactive({
   visible: false,
   value: 0,
   label: 'Restoring SPIFFS image...',
+});
+const spiffsViewerDialog = reactive({
+  visible: false,
+  name: '',
+  content: '',
+  error: null,
+  loading: false,
 });
 const spiffsPartitions = computed(() =>
   partitionTable.value
@@ -3970,5 +4072,17 @@ onBeforeUnmount(() => {
   transform: translateX(4px);
   background-color: color-mix(in srgb, var(--v-theme-primary) 18%, transparent);
   color: color-mix(in srgb, var(--v-theme-primary) 80%, #ffffff 20%);
+}
+
+.spiffs-viewer__content {
+  max-height: 60vh;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 10px;
+  background-color: color-mix(in srgb, var(--v-theme-surface-variant) 80%, transparent);
+  font-family: 'Roboto Mono', 'Fira Code', 'Source Code Pro', monospace;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>
