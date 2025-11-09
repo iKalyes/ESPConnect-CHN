@@ -111,7 +111,7 @@
           <v-select v-model="fileTypeFilter" :items="fileFilterOptions" item-title="label" item-value="value"
             label="File type" density="comfortable" hide-details variant="outlined"
             class="filesystem-table__filter filesystem-table__filter--type" />
-          <v-chip size="small" variant="tonal" color="primary">
+          <v-chip size="large" variant="tonal" color="primary">
             {{ filteredCountLabel }}
           </v-chip>
         </div>
