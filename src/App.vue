@@ -118,6 +118,27 @@
                 subtitle="Connect to an ESP32 with a LittleFS partition to use these tools." />
             </v-window-item>
 
+            <v-window-item value="fatfs">
+              <FilesystemManagerTab v-if="connected && fatfsAvailable" :partitions="fatfsPartitions"
+                :selected-partition-id="fatfsState.selectedId" :files="fatfsState.files" :status="fatfsState.status"
+                :loading="fatfsState.loading" :busy="fatfsState.busy" :saving="fatfsState.saving"
+                :read-only="fatfsState.readOnly" :read-only-reason="fatfsState.readOnlyReason"
+                :dirty="fatfsState.dirty" :backup-done="fatfsState.backupDone || fatfsState.sessionBackupDone"
+                :error="fatfsState.error" :has-partition="hasFatfsPartitionSelected"
+                :has-client="Boolean(fatfsState.client)" :usage="fatfsState.usage"
+                :upload-blocked="fatfsState.uploadBlocked" :upload-blocked-reason="fatfsState.uploadBlockedReason"
+                fs-label="FATFS" partition-title="FATFS Partition"
+                empty-state-message="No FATFS files found. Read the partition or upload to begin."
+                :is-file-viewable="isViewableSpiffsFile" :get-file-preview-info="resolveSpiffsViewInfo"
+                @select-partition="handleSelectFatfsPartition" @refresh="handleRefreshFatfs"
+                @backup="handleFatfsBackup" @restore="handleFatfsRestore" @download-file="handleFatfsDownloadFile"
+                @view-file="handleFatfsView" @validate-upload="handleFatfsUploadSelection"
+                @upload-file="handleFatfsUpload" @delete-file="handleFatfsDelete" @format="handleFatfsFormat"
+                @save="handleFatfsSave" />
+              <DisconnectedState v-else icon="mdi-alpha-f-circle-outline" :min-height="420"
+                subtitle="Connect to an ESP32 with a FATFS partition to use these tools." />
+            </v-window-item>
+
             <v-window-item value="apps">
               <AppsTab v-if="connected" :apps="appPartitions" :active-slot-id="activeAppSlotId"
                 :active-summary="appActiveSummary" :loading="appMetadataLoading" :error="appMetadataError" />
@@ -263,6 +284,78 @@
                 </div>
                 <v-progress-linear :model-value="littlefsRestoreDialog.value" height="24" color="primary" rounded>
                   <strong>{{ Math.min(100, Math.max(0, Math.floor(littlefsRestoreDialog.value))) }}%</strong>
+                </v-progress-linear>
+              </v-card-text>
+            </v-card>
+          </v-dialog>
+
+          <v-dialog :model-value="fatfsBackupDialog.visible" persistent max-width="420" class="progress-dialog">
+            <v-card>
+              <v-card-title class="text-h6">
+                <v-icon start color="primary">mdi-content-save</v-icon>
+                FATFS Backup
+              </v-card-title>
+              <v-card-text class="progress-dialog__body">
+                <div class="progress-dialog__label">
+                  {{ fatfsBackupDialog.label || 'Preparing backup...' }}
+                </div>
+                <v-progress-linear :model-value="fatfsBackupDialog.value" height="24" color="primary" rounded>
+                  <strong>{{ Math.min(100, Math.max(0, Math.floor(fatfsBackupDialog.value))) }}%</strong>
+                </v-progress-linear>
+              </v-card-text>
+              <v-card-actions>
+                <v-spacer />
+                <v-btn variant="text" @click="cancelFatfsBackup">
+                  Cancel
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+
+          <v-dialog :model-value="fatfsLoadingDialog.visible" persistent max-width="420" class="progress-dialog">
+            <v-card>
+              <v-card-title class="text-h6">
+                <v-icon start color="primary">mdi-folder-sync</v-icon>
+                Loading FATFS
+              </v-card-title>
+              <v-card-text class="progress-dialog__body">
+                <div class="progress-dialog__label">
+                  {{ fatfsLoadingDialog.label }}
+                </div>
+                <v-progress-linear indeterminate height="24" color="primary" rounded />
+              </v-card-text>
+            </v-card>
+          </v-dialog>
+
+          <v-dialog :model-value="fatfsSaveDialog.visible" persistent max-width="420" class="progress-dialog">
+            <v-card>
+              <v-card-title class="text-h6">
+                <v-icon start color="primary">mdi-floppy</v-icon>
+                Saving FATFS
+              </v-card-title>
+              <v-card-text class="progress-dialog__body">
+                <div class="progress-dialog__label">
+                  {{ fatfsSaveDialog.label || 'Writing FATFS image...' }}
+                </div>
+                <v-progress-linear :model-value="fatfsSaveDialog.value" height="24" color="primary" rounded>
+                  <strong>{{ Math.min(100, Math.max(0, Math.floor(fatfsSaveDialog.value))) }}%</strong>
+                </v-progress-linear>
+              </v-card-text>
+            </v-card>
+          </v-dialog>
+
+          <v-dialog :model-value="fatfsRestoreDialog.visible" persistent max-width="420" class="progress-dialog">
+            <v-card>
+              <v-card-title class="text-h6">
+                <v-icon start color="primary">mdi-backup-restore</v-icon>
+                Restoring FATFS
+              </v-card-title>
+              <v-card-text class="progress-dialog__body">
+                <div class="progress-dialog__label">
+                  {{ fatfsRestoreDialog.label || 'Writing FATFS image...' }}
+                </div>
+                <v-progress-linear :model-value="fatfsRestoreDialog.value" height="24" color="primary" rounded>
+                  <strong>{{ Math.min(100, Math.max(0, Math.floor(fatfsRestoreDialog.value))) }}%</strong>
                 </v-progress-linear>
               </v-card-text>
             </v-card>
@@ -513,8 +606,10 @@ const SPIFFS_VIEWER_DECODER = new TextDecoder('utf-8', { fatal: false, ignoreBOM
 const SPIFFS_MAX_FILENAME_LENGTH = 31; // Default ESP32 SPIFFS objNameLength (32) minus null terminator
 const LITTLEFS_DEFAULT_BLOCK_SIZE = 4096;
 const LITTLEFS_BLOCK_SIZE_CANDIDATES = [4096, 2048, 1024, 512];
+const FATFS_DEFAULT_BLOCK_SIZE = 512;
 const APP_BASE_URL = (import.meta.env?.BASE_URL ?? '/').replace(/\/+$/, '/') || '/';
 const LITTLEFS_WASM_ENTRY = `${APP_BASE_URL}wasm/littlefs/index.js`;
+const FATFS_WASM_ENTRY = `${APP_BASE_URL}wasm/fatfs/index.js`;
 const LITTLEFS_MODULE_CACHE_KEY =
   import.meta.env?.DEV ?
     `dev-${Date.now().toString(36)}` :
@@ -592,6 +687,7 @@ const APP_SCAN_LENGTH = 0x10000; // 64 KB
 const OTA_SELECT_ENTRY_SIZE = 32;
 const asciiDecoder = new TextDecoder('utf-8');
 let littlefsModulePromise = null;
+let fatfsModulePromise = null;
 
 const JEDEC_MANUFACTURERS = {
   0x01: 'Spansion / Cypress',
@@ -783,6 +879,19 @@ function resolveLittlefsModuleUrl() {
   return `${LITTLEFS_WASM_ENTRY}?v=${LITTLEFS_MODULE_CACHE_KEY}`;
 }
 
+async function loadFatfsModule() {
+  if (!fatfsModulePromise) {
+    const moduleUrl = new URL(FATFS_WASM_ENTRY, typeof window !== 'undefined' ? window.location.origin : undefined);
+    fatfsModulePromise = import(
+      /* @vite-ignore */ moduleUrl.toString()
+    ).catch(error => {
+      fatfsModulePromise = null;
+      throw error;
+    });
+  }
+  return fatfsModulePromise;
+}
+
 function normalizeLittlefsEntries(entries) {
   if (!Array.isArray(entries)) {
     return [];
@@ -822,10 +931,21 @@ function hasLittlefsBackup() {
   return Boolean(littlefsState.backupDone || littlefsState.sessionBackupDone);
 }
 
+function hasFatfsBackup() {
+  return Boolean(fatfsState.backupDone || fatfsState.sessionBackupDone);
+}
+
 function markLittlefsDirty(message) {
   littlefsState.dirty = true;
   if (message) {
     littlefsState.status = message;
+  }
+}
+
+function markFatfsDirty(message) {
+  fatfsState.dirty = true;
+  if (message) {
+    fatfsState.status = message;
   }
 }
 
@@ -1342,6 +1462,490 @@ async function handleLittlefsView(name) {
   }
 }
 
+async function ensureFatfsReady(options = {}) {
+  if (!connected.value || !fatfsAvailable.value) {
+    return;
+  }
+  const partition = fatfsSelectedPartition.value ?? fatfsPartitions.value[0];
+  if (!partition) {
+    return;
+  }
+  if (!fatfsState.selectedId) {
+    fatfsState.selectedId = partition.id;
+  }
+  if (fatfsState.loading || fatfsState.busy || fatfsState.saving) {
+    return;
+  }
+  if (options.force || !fatfsState.client || fatfsState.selectedId !== partition.id) {
+    await loadFatfsPartition(partition);
+  }
+}
+
+async function loadFatfsPartition(partition) {
+  if (!loader.value || !partition) {
+    fatfsState.error = 'Connect to a device with a FATFS partition first.';
+    return;
+  }
+  fatfsState.selectedId = partition.id;
+  fatfsState.loading = true;
+  fatfsState.error = null;
+  fatfsState.readOnly = false;
+  fatfsState.readOnlyReason = '';
+  const baudLabel = currentBaud.value ? ` @ ${currentBaud.value.toLocaleString()} bps` : '';
+  fatfsState.status = `Reading FATFS @ 0x${partition.offset.toString(16).toUpperCase()}${baudLabel}...`;
+  fatfsLoadingDialog.visible = true;
+  fatfsLoadingDialog.label = `Reading ${partition.label || 'FATFS'}${baudLabel}...`;
+  try {
+    await releaseTransportReader();
+    const image = await loader.value.readFlash(partition.offset, partition.size);
+    const module = await loadFatfsModule();
+    const createFatFSFromImage =
+      typeof module.createFatFSFromImage === 'function' ? module.createFatFSFromImage : null;
+    if (!createFatFSFromImage) {
+      throw new Error('FATFS module is missing createFatFSFromImage(). Update the WASM bundle.');
+    }
+    let blockSize = fatfsState.blockSize || FATFS_DEFAULT_BLOCK_SIZE;
+    if (!Number.isFinite(blockSize) || blockSize <= 0) {
+      blockSize = FATFS_DEFAULT_BLOCK_SIZE;
+    }
+    let blockCount = Math.max(1, Math.floor(partition.size / blockSize));
+    if (blockCount <= 0) {
+      blockCount = 1;
+    }
+    fatfsState.blockSize = blockSize;
+    fatfsState.blockCount = blockCount;
+    let client = null;
+    try {
+      client = await createFatFSFromImage(image, {
+        blockSize,
+        blockCount,
+      });
+    } catch (error) {
+      const createFatFS =
+        typeof module.createFatFS === 'function' ? module.createFatFS : module.default?.createFatFS;
+      if (createFatFS) {
+        client = await createFatFS({
+          blockSize,
+          blockCount,
+          formatOnInit: true,
+        });
+        fatfsState.status =
+          'FATFS partition appears blank. Download a backup, click Format, then Save to Flash to initialize it.';
+        appendLog('FATFS partition appears blank/unformatted. Format then save to persist.', '[warn]');
+      } else {
+        throw error;
+      }
+    }
+    fatfsState.client = client;
+    const entries = client.list?.() ?? [];
+    fatfsState.files = normalizeLittlefsEntries(entries);
+    fatfsState.baselineFiles = fatfsState.files.map(file => ({ ...file }));
+    fatfsState.dirty = false;
+    fatfsState.backupDone = false;
+    fatfsState.sessionBackupDone = false;
+    updateFatfsUsage(partition);
+    const count = fatfsState.files.length;
+    fatfsState.status = count === 1 ? 'Loaded 1 file.' : `Loaded ${count} files.`;
+    appendLog(
+      `FATFS partition ${partition.label} loaded (${count} file${count === 1 ? '' : 's'}).`,
+      '[debug]'
+    );
+  } catch (error) {
+    fatfsState.client = null;
+    fatfsState.files = [];
+    fatfsState.baselineFiles = [];
+    updateFatfsUsage(partition);
+    fatfsState.error = formatErrorMessage(error);
+    fatfsState.readOnly = true;
+    fatfsState.readOnlyReason = 'FATFS image unreadable.';
+    fatfsState.status = 'FATFS is read-only.';
+  } finally {
+    fatfsState.loading = false;
+    fatfsLoadingDialog.visible = false;
+  }
+}
+
+async function refreshFatfsListing() {
+  if (!fatfsState.client) {
+    return;
+  }
+  const entries = fatfsState.client.list?.() ?? [];
+  fatfsState.files = normalizeLittlefsEntries(entries);
+  updateFatfsUsage();
+}
+
+function handleSelectFatfsPartition(partitionId) {
+  if (fatfsState.loading || fatfsState.busy || fatfsState.saving) {
+    return;
+  }
+  fatfsState.selectedId = partitionId;
+  fatfsState.client = null;
+  fatfsState.files = [];
+  fatfsState.status = 'Loading FATFS...';
+  const partition = fatfsPartitions.value.find(entry => entry.id === partitionId) ?? fatfsPartitions.value[0];
+  if (partition) {
+    void loadFatfsPartition(partition);
+  }
+}
+
+async function handleRefreshFatfs() {
+  const partition = fatfsSelectedPartition.value;
+  if (!partition) {
+    return;
+  }
+  await loadFatfsPartition(partition);
+}
+
+async function handleFatfsBackup() {
+  const partition = fatfsSelectedPartition.value;
+  if (!partition) {
+    fatfsState.status = 'Select a FATFS partition first.';
+    return;
+  }
+  if (!loader.value) {
+    fatfsState.status = 'Connect to a device first.';
+    return;
+  }
+  fatfsBackupDialog.visible = true;
+  fatfsBackupDialog.value = 0;
+  fatfsBackupDialog.label = 'Preparing backup...';
+  try {
+    const baseLabel = `${partition.label || 'fatfs'}_${partition.offset.toString(16)}`;
+    const safeBase = sanitizeFileName(baseLabel, 'fatfs');
+    const stampedName = `${safeBase}_${formatBackupTimestamp()}.bin`;
+    await downloadFlashRegion(partition.offset, partition.size, {
+      label: `${partition.label || 'FATFS'} partition`,
+      fileName: stampedName,
+      suppressStatus: true,
+      onProgress: progress => {
+        fatfsBackupDialog.value = progress.value ?? 0;
+        fatfsBackupDialog.label = progress.label || 'Backing up FATFS...';
+      },
+    });
+    fatfsState.backupDone = true;
+    fatfsState.sessionBackupDone = true;
+    fatfsState.status = 'Backup downloaded. You can now save changes.';
+    appendLog('FATFS backup downloaded.', '[debug]');
+  } catch (error) {
+    fatfsState.error = formatErrorMessage(error);
+    fatfsState.status = 'FATFS backup failed.';
+  } finally {
+    fatfsBackupDialog.visible = false;
+    fatfsBackupDialog.value = 0;
+    fatfsBackupDialog.label = '';
+  }
+}
+
+function cancelFatfsBackup() {
+  if (!fatfsBackupDialog.visible) {
+    return;
+  }
+  fatfsBackupDialog.label = 'Stopping backup...';
+  handleCancelDownload();
+}
+
+async function handleFatfsRestore(file) {
+  const partition = fatfsSelectedPartition.value;
+  if (!partition) return;
+  if (!file) return;
+  const buffer = new Uint8Array(await file.arrayBuffer());
+  if (buffer.length !== partition.size) {
+    fatfsState.status = `Restore file must be exactly ${formatBytes(partition.size) ?? `${partition.size} bytes`}.`;
+    return;
+  }
+  const confirmed = await showConfirmation({
+    title: 'Restore FATFS Partition',
+    message: 'This will overwrite the entire FATFS partition with the selected image. Continue?',
+    confirmText: 'Restore',
+    destructive: true,
+  });
+  if (!confirmed) {
+    return;
+  }
+  try {
+    fatfsState.saving = true;
+    maintenanceBusy.value = true;
+    fatfsRestoreDialog.visible = true;
+    fatfsRestoreDialog.value = 0;
+    fatfsRestoreDialog.label = 'Writing FATFS image...';
+    await writeFilesystemImage(partition, buffer, {
+      label: 'FATFS',
+      state: fatfsState,
+      onProgress: progress => {
+        fatfsRestoreDialog.value = progress.value ?? 0;
+        fatfsRestoreDialog.label = progress.label || 'Writing FATFS image...';
+      },
+    });
+    fatfsState.status = 'FATFS image restored.';
+    fatfsState.backupDone = true;
+    appendLog('FATFS partition restored from backup.', '[debug]');
+    await loadFatfsPartition(partition);
+  } catch (error) {
+    fatfsState.error = formatErrorMessage(error);
+    fatfsState.status = 'FATFS restore failed.';
+  } finally {
+    fatfsState.saving = false;
+    maintenanceBusy.value = false;
+    fatfsRestoreDialog.visible = false;
+    fatfsRestoreDialog.value = 0;
+    fatfsRestoreDialog.label = 'Restoring FATFS image...';
+  }
+}
+
+function handleFatfsUploadSelection(file) {
+  if (!file || !fatfsState.client) {
+    fatfsState.uploadBlocked = false;
+    fatfsState.uploadBlockedReason = '';
+    return;
+  }
+  const partition = fatfsSelectedPartition.value;
+  const partitionSize = partition?.size ?? fatfsState.blockSize * fatfsState.blockCount;
+  const usedBytes = fatfsState.files.reduce((sum, entry) => sum + (entry.size ?? 0), 0);
+  const existingSize = fatfsState.files.find(entry => entry.name === file.name)?.size ?? 0;
+  const availableBytes = partitionSize ? partitionSize - usedBytes + existingSize : 0;
+  if (partitionSize && file.size > availableBytes) {
+    const message =
+      'Not enough FATFS space for this file. Delete files or format the partition, then try again.';
+    fatfsState.uploadBlocked = true;
+    fatfsState.uploadBlockedReason = message;
+    fatfsState.status = message;
+    showUploadError(message);
+    return;
+  }
+  fatfsState.uploadBlocked = false;
+  fatfsState.uploadBlockedReason = '';
+}
+
+async function handleFatfsUpload({ file }) {
+  if (!fatfsState.client) return;
+  if (fatfsState.readOnly) {
+    fatfsState.status = fatfsState.readOnlyReason || 'FATFS is read-only.';
+    return;
+  }
+  if (fatfsState.uploadBlocked) {
+    fatfsState.status = fatfsState.uploadBlockedReason || 'Resolve blocked upload before continuing.';
+    if (fatfsState.uploadBlockedReason) {
+      showUploadError(fatfsState.uploadBlockedReason);
+    }
+    return;
+  }
+  if (!file) {
+    fatfsState.status = 'Select a file to upload.';
+    return;
+  }
+  const targetName = (file.name || '').trim();
+  if (!targetName) {
+    fatfsState.status = 'Selected file has no name. Rename it and try again.';
+    return;
+  }
+  try {
+    fatfsState.busy = true;
+    const data = new Uint8Array(await file.arrayBuffer());
+    fatfsState.client.writeFile(targetName, data);
+    await refreshFatfsListing();
+    markFatfsDirty(`Staged ${targetName}. Remember to Save.`);
+    appendLog(`FATFS staged ${targetName} (${data.length.toLocaleString()} bytes).`, '[debug]');
+  } catch (error) {
+    fatfsState.error = formatErrorMessage(error);
+  } finally {
+    fatfsState.busy = false;
+  }
+}
+
+async function handleFatfsDelete(name) {
+  if (!fatfsState.client || fatfsState.readOnly) {
+    return;
+  }
+  const confirmed = await showConfirmation({
+    title: 'Delete File',
+    message: `Delete ${name} from FATFS? This cannot be undone.`,
+    confirmText: 'Delete',
+    destructive: true,
+  });
+  if (!confirmed) {
+    return;
+  }
+  try {
+    fatfsState.busy = true;
+    fatfsState.client.deleteFile(name);
+    await refreshFatfsListing();
+    markFatfsDirty(`${name} deleted. Save to persist.`);
+    appendLog(`FATFS staged deletion of ${name}.`, '[debug]');
+  } catch (error) {
+    fatfsState.error = formatErrorMessage(error);
+  } finally {
+    fatfsState.busy = false;
+  }
+}
+
+async function handleFatfsFormat() {
+  if (!fatfsState.client || fatfsState.readOnly) {
+    return;
+  }
+  const confirmed = await showConfirmation({
+    title: 'Format FATFS',
+    message: 'Erase all files from the FATFS image? You must Save to apply.',
+    confirmText: 'Format',
+    destructive: true,
+  });
+  if (!confirmed) return;
+  try {
+    fatfsState.busy = true;
+    fatfsState.client.format();
+    await refreshFatfsListing();
+    markFatfsDirty('FATFS formatted. Save to apply.');
+    appendLog('FATFS staged format operation.', '[debug]');
+  } catch (error) {
+    fatfsState.error = formatErrorMessage(error);
+  } finally {
+    fatfsState.busy = false;
+  }
+}
+
+async function handleFatfsSave() {
+  if (!fatfsState.client) {
+    fatfsState.status = 'Load a FATFS partition first.';
+    return;
+  }
+  if (fatfsState.readOnly) {
+    fatfsState.status = fatfsState.readOnlyReason || 'FATFS is read-only.';
+    return;
+  }
+  if (!fatfsState.dirty) {
+    fatfsState.status = 'No staged changes to save.';
+    return;
+  }
+  if (!hasFatfsBackup()) {
+    fatfsState.status = 'Download a FATFS backup before saving (one backup per session is enough).';
+    return;
+  }
+  const partition = fatfsSelectedPartition.value;
+  if (!partition) {
+    fatfsState.status = 'Select a FATFS partition.';
+    return;
+  }
+  const diff = computeFatfsDiff();
+  const summaryParts = [];
+  if (diff.added.length) summaryParts.push(`Added: ${diff.added.join(', ')}`);
+  if (diff.modified.length) summaryParts.push(`Modified: ${diff.modified.join(', ')}`);
+  if (diff.removed.length) summaryParts.push(`Removed: ${diff.removed.join(', ')}`);
+  const summary =
+    summaryParts.length > 0
+      ? summaryParts.join('\n')
+      : 'No file-level changes detected (still writing updated image).';
+  const confirmed = await showConfirmation({
+    title: 'Write FATFS to Flash',
+    message: `${summary}\n\nWrite these changes to flash now?`,
+    confirmText: 'Save to Flash',
+    destructive: true,
+  });
+  if (!confirmed) return;
+  try {
+    fatfsState.saving = true;
+    maintenanceBusy.value = true;
+    fatfsSaveDialog.visible = true;
+    const image = await Promise.resolve(fatfsState.client.toImage());
+    if (image.length > partition.size) {
+      throw new Error('FATFS image exceeds partition size.');
+    }
+    await writeFilesystemImage(partition, image, {
+      label: 'FATFS',
+      state: fatfsState,
+      onProgress: progress => {
+        fatfsSaveDialog.value = progress.value ?? 0;
+        fatfsSaveDialog.label = progress.label || 'Writing FATFS image...';
+      },
+    });
+    fatfsState.dirty = false;
+    fatfsState.status = 'FATFS saved to flash.';
+    appendLog('FATFS partition updated on flash.', '[debug]');
+    await loadFatfsPartition(partition);
+  } catch (error) {
+    fatfsState.error = formatErrorMessage(error);
+    fatfsState.status = 'FATFS save failed.';
+  } finally {
+    fatfsState.saving = false;
+    maintenanceBusy.value = false;
+    fatfsSaveDialog.visible = false;
+    fatfsSaveDialog.value = 0;
+    fatfsSaveDialog.label = 'Saving FATFS...';
+  }
+}
+
+async function readFatfsFile(name) {
+  if (!fatfsState.client) {
+    throw new Error('FATFS client unavailable.');
+  }
+  if (!name) {
+    throw new Error('File name is required.');
+  }
+  const reader =
+    typeof fatfsState.client.readFile === 'function'
+      ? fatfsState.client.readFile
+      : typeof fatfsState.client.read === 'function'
+        ? fatfsState.client.read
+        : null;
+  if (!reader) {
+    throw new Error('FATFS module does not support per-file reads. Update the WASM bundle.');
+  }
+  const result = reader.call(fatfsState.client, name);
+  const data = result instanceof Promise ? await result : result;
+  if (!(data instanceof Uint8Array)) {
+    throw new Error('FATFS read returned unexpected data.');
+  }
+  return data;
+}
+
+async function handleFatfsDownloadFile(name) {
+  if (!fatfsState.client || !name) return;
+  try {
+    const data = await readFatfsFile(name);
+    saveBinaryFile(name, data);
+    appendLog(`FATFS downloaded ${name} (${data.length.toLocaleString()} bytes).`, '[debug]');
+  } catch (error) {
+    fatfsState.error = formatErrorMessage(error);
+    fatfsState.status = 'FATFS download failed.';
+  }
+}
+
+async function handleFatfsView(name) {
+  if (!fatfsState.client) return;
+  const viewInfo = resolveSpiffsViewInfo(name);
+  if (!viewInfo) {
+    fatfsState.status = 'This file type cannot be previewed. Download it instead.';
+    return;
+  }
+  resetViewerMedia();
+  spiffsViewerDialog.visible = true;
+  spiffsViewerDialog.name = name;
+  spiffsViewerDialog.loading = true;
+  spiffsViewerDialog.error = null;
+  spiffsViewerDialog.content = '';
+  spiffsViewerDialog.mode = viewInfo.mode;
+  spiffsViewerDialog.source = 'fatfs';
+  try {
+    const data = await readFatfsFile(name);
+    if (data.length > SPIFFS_VIEWER_MAX_BYTES) {
+      throw new Error(
+        `File too large to preview (limit ${formatBytes(SPIFFS_VIEWER_MAX_BYTES) ?? SPIFFS_VIEWER_MAX_BYTES} bytes).`,
+      );
+    }
+    if (viewInfo.mode === 'image') {
+      const blob = new Blob([data], { type: viewInfo.mime || 'image/*' });
+      spiffsViewerDialog.imageUrl = URL.createObjectURL(blob);
+    } else if (viewInfo.mode === 'audio') {
+      const blob = new Blob([data], { type: viewInfo.mime || 'audio/*' });
+      spiffsViewerDialog.audioUrl = URL.createObjectURL(blob);
+    } else {
+      spiffsViewerDialog.content = SPIFFS_VIEWER_DECODER.decode(data);
+    }
+  } catch (error) {
+    spiffsViewerDialog.error = formatErrorMessage(error);
+  } finally {
+    spiffsViewerDialog.loading = false;
+  }
+}
+
 function buildFactGroups(facts) {
   const groups = [];
   const assigned = new Set();
@@ -1542,6 +2146,44 @@ function updateLittlefsUsage(partition = littlefsSelectedPartition.value) {
   };
 }
 
+function resetFatfsState() {
+  fatfsState.selectedId = null;
+  fatfsState.client = null;
+  fatfsState.files = [];
+  fatfsState.status = 'Load a FATFS partition to begin.';
+  fatfsState.loading = false;
+  fatfsState.busy = false;
+  fatfsState.saving = false;
+  fatfsState.error = null;
+  fatfsState.readOnly = false;
+  fatfsState.readOnlyReason = '';
+  fatfsState.dirty = false;
+  fatfsState.backupDone = false;
+  fatfsState.sessionBackupDone = false;
+  fatfsState.baselineFiles = [];
+  fatfsState.usage = {
+    capacityBytes: 0,
+    usedBytes: 0,
+    freeBytes: 0,
+  };
+  fatfsState.uploadBlocked = false;
+  fatfsState.uploadBlockedReason = '';
+  fatfsState.blockSize = FATFS_DEFAULT_BLOCK_SIZE;
+  fatfsState.blockCount = 0;
+}
+
+function updateFatfsUsage(partition = fatfsSelectedPartition.value) {
+  const partitionSize = partition?.size ?? fatfsState.blockSize * fatfsState.blockCount;
+  const capacityBytes =
+    fatfsState.blockSize && fatfsState.blockCount ? fatfsState.blockSize * fatfsState.blockCount : partitionSize;
+  const usedBytes = fatfsState.files.reduce((sum, file) => sum + (file.size ?? 0), 0);
+  fatfsState.usage = {
+    capacityBytes,
+    usedBytes,
+    freeBytes: Math.max(capacityBytes - usedBytes, 0),
+  };
+}
+
 function resolveSpiffsViewInfo(name = '') {
   if (!name) return null;
   const dotIndex = name.lastIndexOf('.');
@@ -1681,6 +2323,10 @@ function computeFileDiff(baselineFiles = [], currentFiles = []) {
 
 function computeLittlefsDiff() {
   return computeFileDiff(littlefsState.baselineFiles, littlefsState.files);
+}
+
+function computeFatfsDiff() {
+  return computeFileDiff(fatfsState.baselineFiles, fatfsState.files);
 }
 
 async function handleSelectSpiffsPartition(partitionId) {
@@ -1915,6 +2561,8 @@ function handleFilesystemViewerDownload() {
   }
   if (spiffsViewerDialog.source === 'littlefs') {
     void handleLittlefsDownloadFile(spiffsViewerDialog.name);
+  } else if (spiffsViewerDialog.source === 'fatfs') {
+    void handleFatfsDownloadFile(spiffsViewerDialog.name);
   } else {
     void handleSpiffsDownloadFile(spiffsViewerDialog.name);
   }
@@ -2359,6 +3007,26 @@ const littlefsRestoreDialog = reactive({
   value: 0,
   label: 'Restoring LittleFS image...',
 });
+const fatfsBackupDialog = reactive({
+  visible: false,
+  value: 0,
+  label: '',
+});
+const fatfsLoadingDialog = reactive({
+  visible: false,
+  value: 0,
+  label: 'Reading FATFS...',
+});
+const fatfsSaveDialog = reactive({
+  visible: false,
+  value: 0,
+  label: 'Saving FATFS...',
+});
+const fatfsRestoreDialog = reactive({
+  visible: false,
+  value: 0,
+  label: 'Restoring FATFS image...',
+});
 const spiffsPartitions = computed(() =>
   partitionTable.value
     .filter(
@@ -2429,10 +3097,60 @@ const littlefsState = reactive({
   blockSize: LITTLEFS_DEFAULT_BLOCK_SIZE,
   blockCount: 0,
 });
+const fatfsPartitions = computed(() =>
+  partitionTable.value
+    .filter(entry => {
+      if (!entry || typeof entry.type !== 'number' || typeof entry.subtype !== 'number') {
+        return false;
+      }
+      if (entry.type !== 0x01) {
+        return false;
+      }
+      const label = entry.label?.toLowerCase().trim() || '';
+      return entry.subtype === 0x81 || label.includes('fat');
+    })
+    .map(entry => ({
+      id: entry.offset,
+      label: entry.label?.trim() || 'FATFS',
+      offset: entry.offset,
+      size: entry.size,
+      sizeText: formatBytes(entry.size) ?? `${entry.size} bytes`,
+    })),
+);
+const fatfsAvailable = computed(() => fatfsPartitions.value.length > 0);
+const fatfsState = reactive({
+  selectedId: null,
+  client: null,
+  files: [],
+  status: 'Load a FATFS partition to begin.',
+  loading: false,
+  busy: false,
+  saving: false,
+  error: null,
+  readOnly: false,
+  readOnlyReason: '',
+  dirty: false,
+  backupDone: false,
+  sessionBackupDone: false,
+  usage: {
+    capacityBytes: 0,
+    usedBytes: 0,
+    freeBytes: 0,
+  },
+  baselineFiles: [],
+  uploadBlocked: false,
+  uploadBlockedReason: '',
+  blockSize: FATFS_DEFAULT_BLOCK_SIZE,
+  blockCount: 0,
+});
 const littlefsSelectedPartition = computed(() =>
   littleFsPartitions.value.find(partition => partition.id === littlefsState.selectedId) ?? null,
 );
 const hasLittlefsPartitionSelected = computed(() => Boolean(littlefsSelectedPartition.value));
+const fatfsSelectedPartition = computed(() =>
+  fatfsPartitions.value.find(partition => partition.id === fatfsState.selectedId) ?? null,
+);
+const hasFatfsPartitionSelected = computed(() => Boolean(fatfsSelectedPartition.value));
 const logBuffer = ref('');
 const monitorText = ref('');
 const monitorActive = ref(false);
@@ -2479,6 +3197,12 @@ const navigationItems = computed(() => [
     value: 'littlefs',
     icon: 'mdi-alpha-l-circle-outline',
     disabled: !connected.value || !littleFsAvailable.value,
+  },
+  {
+    title: 'FATFS Tools',
+    value: 'fatfs',
+    icon: 'mdi-alpha-f-circle-outline',
+    disabled: !connected.value || !fatfsAvailable.value,
   },
   { title: 'Firmware Tools', value: 'flash', icon: 'mdi-chip', disabled: false },
   { title: 'Serial Monitor', value: 'console', icon: 'mdi-console-line', disabled: false },
@@ -2661,6 +3385,9 @@ watch(activeTab, value => {
   if (value === 'littlefs') {
     void ensureLittlefsReady();
   }
+  if (value === 'fatfs') {
+    void ensureFatfsReady();
+  }
 });
 
 watch(
@@ -2673,6 +3400,7 @@ watch(
     if (!connected.value) {
       resetSpiffsState();
       resetLittlefsState();
+      resetFatfsState();
       return;
     }
     if (spiffsPartitions.value.length) {
@@ -2694,6 +3422,16 @@ watch(
       }
     } else {
       resetLittlefsState();
+    }
+    if (fatfsPartitions.value.length) {
+      if (!fatfsPartitions.value.some(partition => partition.id === fatfsState.selectedId)) {
+        fatfsState.selectedId = fatfsPartitions.value[0].id;
+      }
+      if (activeTab.value === 'fatfs') {
+        void ensureFatfsReady();
+      }
+    } else {
+      resetFatfsState();
     }
   }
 );
@@ -3870,6 +4608,8 @@ async function disconnectTransport() {
     spiffsState.selectedId = null;
     resetLittlefsState();
     littlefsState.selectedId = null;
+    resetFatfsState();
+    fatfsState.selectedId = null;
     currentBaud.value = DEFAULT_FLASH_BAUD;
     baudChangeBusy.value = false;
   }
