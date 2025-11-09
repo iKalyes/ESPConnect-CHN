@@ -86,6 +86,7 @@
                 :has-partition="hasSpiffsPartitionSelected" :has-client="Boolean(spiffsState.client)"
                 :usage="spiffsState.usage" :upload-blocked="spiffsState.uploadBlocked"
                 :upload-blocked-reason="spiffsState.uploadBlockedReason" :is-file-viewable="isViewableSpiffsFile"
+                :load-cancelled="spiffsState.loadCancelled"
                 :get-file-preview-info="resolveSpiffsViewInfo" @select-partition="handleSelectSpiffsPartition"
                 @refresh="handleRefreshSpiffs" @backup="handleSpiffsBackup" @restore="handleSpiffsRestore"
                 @download-file="handleSpiffsDownloadFile" @view-file="handleSpiffsView"
@@ -106,6 +107,7 @@
                 :has-client="Boolean(littlefsState.client)" :usage="littlefsState.usage"
                 :upload-blocked="littlefsState.uploadBlocked"
                 :upload-blocked-reason="littlefsState.uploadBlockedReason" fs-label="LittleFS"
+                :load-cancelled="littlefsState.loadCancelled"
                 partition-title="LittleFS Partition"
                 empty-state-message="No LittleFS files found. Read the partition or upload to begin."
                 :is-file-viewable="isViewableSpiffsFile" :get-file-preview-info="resolveSpiffsViewInfo"
@@ -127,6 +129,7 @@
                 :error="fatfsState.error" :has-partition="hasFatfsPartitionSelected"
                 :has-client="Boolean(fatfsState.client)" :usage="fatfsState.usage"
                 :upload-blocked="fatfsState.uploadBlocked" :upload-blocked-reason="fatfsState.uploadBlockedReason"
+                :load-cancelled="fatfsState.loadCancelled"
                 fs-label="FATFS" partition-title="FATFS Partition"
                 empty-state-message="No FATFS files found. Read the partition or upload to begin."
                 :is-file-viewable="isViewableSpiffsFile" :get-file-preview-info="resolveSpiffsViewInfo"
@@ -987,6 +990,7 @@ async function loadLittlefsPartition(partition) {
   littlefsState.error = null;
   littlefsState.readOnly = false;
   littlefsState.readOnlyReason = '';
+  littlefsState.loadCancelled = false;
   const littlefsBaudLabel = currentBaud.value ? ` @ ${currentBaud.value.toLocaleString()} bps` : '';
   littlefsState.status = `Reading LittleFS @ 0x${partition.offset.toString(16).toUpperCase()}${littlefsBaudLabel}...`;
   littlefsLoadingDialog.visible = true;
@@ -1051,6 +1055,7 @@ async function loadLittlefsPartition(partition) {
           littlefsState.status =
             'LittleFS partition appears blank. Download a backup, click Format, then Save to Flash to initialize it.';
           appendLog('LittleFS partition appears blank/unformatted. Format then save to persist.', '[warn]');
+          littlefsState.loadCancelled = false;
           return;
         } catch (fallbackError) {
           lastError = fallbackError;
@@ -1083,9 +1088,22 @@ async function loadLittlefsPartition(partition) {
   } catch (error) {
     const message = formatErrorMessage(error);
     if (message === FILESYSTEM_LOAD_CANCELLED_MESSAGE) {
-      littlefsState.status = 'LittleFS load cancelled.';
+      littlefsState.loadCancelled = true;
+      littlefsState.client = null;
+      littlefsState.files = [];
+      littlefsState.baselineFiles = [];
+      littlefsState.dirty = false;
+      littlefsState.backupDone = false;
+      littlefsState.sessionBackupDone = false;
+      littlefsState.blockCount = 0;
+      updateLittlefsUsage(partition);
       littlefsState.error = null;
+      littlefsState.readOnly = false;
+      littlefsState.readOnlyReason = '';
+      littlefsState.status = 'LittleFS load cancelled. Use "Read" to fetch the partition again.';
+      return;
     } else {
+      littlefsState.loadCancelled = false;
       littlefsState.client = null;
       littlefsState.files = [];
       littlefsState.baselineFiles = [];
@@ -1535,6 +1553,7 @@ async function loadFatfsPartition(partition) {
   fatfsState.error = null;
   fatfsState.readOnly = false;
   fatfsState.readOnlyReason = '';
+  fatfsState.loadCancelled = false;
   const baudLabel = currentBaud.value ? ` @ ${currentBaud.value.toLocaleString()} bps` : '';
   fatfsState.status = `Reading FATFS @ 0x${partition.offset.toString(16).toUpperCase()}${baudLabel}...`;
   fatfsLoadingDialog.visible = true;
@@ -1603,9 +1622,21 @@ async function loadFatfsPartition(partition) {
   } catch (error) {
     const message = formatErrorMessage(error);
     if (message === FILESYSTEM_LOAD_CANCELLED_MESSAGE) {
-      fatfsState.status = 'FATFS load cancelled.';
+      fatfsState.loadCancelled = true;
+      fatfsState.client = null;
+      fatfsState.files = [];
+      fatfsState.baselineFiles = [];
+      fatfsState.dirty = false;
+      fatfsState.backupDone = false;
+      fatfsState.sessionBackupDone = false;
+      updateFatfsUsage(partition);
       fatfsState.error = null;
+      fatfsState.readOnly = false;
+      fatfsState.readOnlyReason = '';
+      fatfsState.status = 'FATFS load cancelled. Use "Read" to fetch the partition again.';
+      return;
     } else {
+      fatfsState.loadCancelled = false;
       fatfsState.client = null;
       fatfsState.files = [];
       fatfsState.baselineFiles = [];
@@ -2153,6 +2184,7 @@ function resetSpiffsState() {
   spiffsState.busy = false;
   spiffsState.saving = false;
   spiffsState.error = null;
+  spiffsState.loadCancelled = false;
   spiffsState.readOnly = false;
   spiffsState.readOnlyReason = '';
   spiffsState.dirty = false;
@@ -2191,6 +2223,7 @@ function resetLittlefsState() {
   littlefsState.busy = false;
   littlefsState.saving = false;
   littlefsState.error = null;
+  littlefsState.loadCancelled = false;
   littlefsState.readOnly = false;
   littlefsState.readOnlyReason = '';
   littlefsState.dirty = false;
@@ -2231,6 +2264,7 @@ function resetFatfsState() {
   fatfsState.busy = false;
   fatfsState.saving = false;
   fatfsState.error = null;
+  fatfsState.loadCancelled = false;
   fatfsState.readOnly = false;
   fatfsState.readOnlyReason = '';
   fatfsState.dirty = false;
@@ -2311,6 +2345,7 @@ async function loadSpiffsPartition(partition) {
   spiffsState.error = null;
   spiffsState.readOnly = false;
   spiffsState.readOnlyReason = '';
+  spiffsState.loadCancelled = false;
   const spiffsBaudLabel = currentBaud.value ? ` @ ${currentBaud.value.toLocaleString()} bps` : '';
   spiffsState.status = `Reading SPIFFS @ 0x${partition.offset.toString(16).toUpperCase()}${spiffsBaudLabel}...`;
   spiffsLoadingDialog.visible = true;
@@ -2356,9 +2391,21 @@ async function loadSpiffsPartition(partition) {
   } catch (error) {
     const message = formatErrorMessage(error);
     if (message === FILESYSTEM_LOAD_CANCELLED_MESSAGE) {
-      spiffsState.status = 'SPIFFS load cancelled.';
+      spiffsState.loadCancelled = true;
+      spiffsState.client = null;
+      spiffsState.files = [];
+      spiffsState.baselineFiles = [];
+      spiffsState.dirty = false;
+      spiffsState.backupDone = false;
+      spiffsState.sessionBackupDone = false;
+      updateSpiffsUsage();
       spiffsState.error = null;
+      spiffsState.readOnly = false;
+      spiffsState.readOnlyReason = '';
+      spiffsState.status = 'SPIFFS load cancelled. Use "Read" to fetch the partition again.';
+      return;
     } else {
+      spiffsState.loadCancelled = false;
       spiffsState.error = message;
       spiffsState.status = 'Failed to read SPIFFS.';
     }
@@ -3127,6 +3174,7 @@ const spiffsState = reactive({
   dirty: false,
   backupDone: false,
   sessionBackupDone: false,
+  loadCancelled: false,
   diagnostics: [],
   baselineFiles: [],
   usage: {
@@ -3273,6 +3321,7 @@ const littlefsState = reactive({
   dirty: false,
   backupDone: false,
   sessionBackupDone: false,
+  loadCancelled: false,
   usage: {
     capacityBytes: 0,
     usedBytes: 0,
@@ -3319,6 +3368,7 @@ const fatfsState = reactive({
   dirty: false,
   backupDone: false,
   sessionBackupDone: false,
+  loadCancelled: false,
   usage: {
     capacityBytes: 0,
     usedBytes: 0,

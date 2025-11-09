@@ -56,7 +56,12 @@
       </v-card-text>
     </v-card>
 
-    <v-card :variant="dragActive ? 'outlined' : 'tonal'">
+    <v-alert v-if="showLoadCancelledBanner" type="warning" variant="tonal" density="comfortable" border="start"
+      class="filesystem-load-cancelled">
+      {{ loadCancelledMessage }}
+    </v-alert>
+
+    <v-card v-else :variant="dragActive ? 'outlined' : 'tonal'">
       <v-card-title class="d-flex align-center justify-space-between">
         <span>Files</span>
         <v-chip v-if="dirty" color="warning" size="large" variant="tonal">
@@ -235,6 +240,10 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  loadCancelled: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const fileTableHeaders = Object.freeze([
@@ -279,6 +288,10 @@ const fsLabel = computed(() => (props.fsLabel && props.fsLabel.trim()) || 'SPIFF
 const partitionHeading = computed(() => props.partitionTitle?.trim() || `${fsLabel.value} Partition`);
 const emptyMessage = computed(
   () => props.emptyStateMessage?.trim() || `No files detected. Upload or restore a ${fsLabel.value} image to begin.`,
+);
+const showLoadCancelledBanner = computed(() => props.loadCancelled && !props.loading);
+const loadCancelledMessage = computed(
+  () => `${fsLabel.value} load cancelled. Use "Read" to fetch the partition again.`,
 );
 const readOnlyMessage = computed(() => {
   const detail = props.readOnlyReason?.trim();
@@ -647,6 +660,10 @@ function previewLabel(name) {
   padding: 32px 0;
   text-align: center;
   color: color-mix(in srgb, var(--v-theme-on-surface) 70%, transparent);
+}
+
+.filesystem-load-cancelled {
+  width: 100%;
 }
 
 .filesystem-dropzone {
