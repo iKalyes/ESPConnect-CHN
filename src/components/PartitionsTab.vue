@@ -17,7 +17,7 @@
   <div v-else class="partition-view">
     <v-card variant="tonal" prepend-icon="mdi-table">
       <template v-slot:title>
-        <span class="font-weight-black">Partitions</span>
+        <span class="font-weight-black">{{ partitionCardTitle }}</span>
       </template>
       <v-alert v-if="showUnusedAlert" type="warning" variant="tonal" class="unused-alert">
         <div>
@@ -120,15 +120,23 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  flashSizeLabel: {
+    type: String,
+    default: '',
+  },
 });
 
-const { partitionSegments, formattedPartitions, unusedSummary } = toRefs(props);
+const { partitionSegments, formattedPartitions, unusedSummary, flashSizeLabel } = toRefs(props);
 
 const showUnusedAlert = computed(() => Boolean(unusedSummary.value));
 const unusedReadable = computed(() => unusedSummary.value?.readable ?? '');
 const unusedBytesDisplay = computed(() =>
   unusedSummary.value?.bytes != null ? unusedSummary.value.bytes.toLocaleString() : ''
 );
+const partitionCardTitle = computed(() => {
+  const label = flashSizeLabel.value?.trim();
+  return label ? `Partitions · ${label}` : 'Partitions';
+});
 </script>
 
 <style scoped>

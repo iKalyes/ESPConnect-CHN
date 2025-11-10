@@ -73,7 +73,7 @@
 
             <v-window-item value="partitions">
               <PartitionsTab :partition-segments="partitionSegments" :formatted-partitions="formattedPartitions"
-                :unused-summary="unusedFlashSummary" />
+                :unused-summary="unusedFlashSummary" :flash-size-label="partitionFlashSizeLabel" />
             </v-window-item>
 
             <v-window-item value="spiffs">
@@ -3449,6 +3449,7 @@ const loader = ref(null);
 const firmwareBuffer = ref(null);
 const firmwareName = ref('');
 const chipDetails = ref(null);
+const partitionFlashSizeLabel = computed(() => chipDetails.value?.flashSize ?? null);
 const partitionTable = ref([]);
 const activeTab = ref('info');
 const sessionLogRef = ref(null);
