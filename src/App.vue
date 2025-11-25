@@ -5047,7 +5047,12 @@ async function connect() {
       const fn = chip?.[method];
       if (typeof fn === 'function') {
         try {
-          return await fn.call(chip, loader.value);
+          const result = await fn.call(chip, loader.value);
+          appendLog(
+            `Chip ${method}: ${result === undefined ? 'undefined' : JSON.stringify(result)}`,
+            '[debug]'
+          );
+          return result;
         } catch (err) {
           appendLog(`Unable to retrieve ${method}: ${err?.message || err}`, '[warn]');
           return undefined;
