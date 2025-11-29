@@ -4679,9 +4679,9 @@ async function connect() {
     const macAddress = metadata.macAddress;
 
     connectDialog.message = `Reading Flash size...`;
-    const flashSizeRaw = await esptool.detectFlashSize();
+    const flashLabel = await esptool.detectFlashSize();
     appendLog(
-      `Chip detectFlashSize: ${flashSizeRaw === undefined ? 'undefined' : JSON.stringify(flashSizeRaw)}`,
+      `Chip detectFlashSize: ${flashLabel === undefined ? 'undefined' : JSON.stringify(flashLabel)}`,
       '[ESPConnect-Debug]'
     );
 
@@ -4703,9 +4703,8 @@ async function connect() {
       typeof flashId === 'number' && Number.isFinite(flashId) ? (flashId >> 8) & 0xff : null;
     const capacityCodeRaw =
       typeof flashId === 'number' && Number.isFinite(flashId) ? (flashId >> 16) & 0xff : null;
-    const flashSizeLabel = typeof flashSizeRaw === 'string' ? flashSizeRaw : null;
     appendLog(
-      `Flash detect raw: getFlashSize=${flashSizeLabel ?? 'n/a'}, flashId=${typeof flashId === 'number' && Number.isFinite(flashId) ? `0x${flashId
+      `Flash detect raw: getFlashSize=${flashLabel ?? 'n/a'}, flashId=${typeof flashId === 'number' && Number.isFinite(flashId) ? `0x${flashId
         .toString(16)
         .padStart(6, '0')
         .toUpperCase()}` : 'n/a'} (manuf=0x${Number.isInteger(manufacturerCode)
@@ -4729,63 +4728,6 @@ async function connect() {
         feature => typeof feature === 'string' && feature.toUpperCase().includes('OCTAL')
       );
 
-    const parseFlashSizeLabel = label => {
-      if (!label || typeof label !== 'string') return null;
-      const match = label.match(/(\d+(?:\.\d+)?)\s*(MB|KB)/i);
-      if (!match) return null;
-      const value = Number.parseFloat(match[1]);
-      if (!Number.isFinite(value) || value <= 0) return null;
-      return match[2].toUpperCase() === 'MB' ? value * 1024 * 1024 : value * 1024;
-    };
-
-    let flashBytesValue = parseFlashSizeLabel(flashSizeLabel);
-    let flashLabelSuffix = '';
-    if (!flashBytesValue) {
-      const capacityCandidates = [capacityCodeRaw, memoryTypeCode, manufacturerCode].filter(
-        value =>
-          Number.isInteger(value) &&
-          value >= 0x12 &&
-          value <= 0x26
-      );
-      for (const candidate of capacityCandidates) {
-        const fallbackFlashBytes = Math.pow(2, candidate);
-        if (Number.isFinite(fallbackFlashBytes) && fallbackFlashBytes > 0) {
-          flashBytesValue = fallbackFlashBytes;
-          flashLabelSuffix = '';
-          appendLog(
-            `Flash size detection fallback: using JEDEC capacity code 0x${candidate
-              .toString(16)
-              .toUpperCase()} from flash ID 0x${flashId
-                ?.toString(16)
-                .padStart(6, '0')
-                .toUpperCase()}.`,
-            '[warn]'
-          );
-          break;
-        }
-      }
-    }
-    const toHexByte = value =>
-      Number.isInteger(value) && value >= 0
-        ? value.toString(16).toUpperCase().padStart(2, '0')
-        : '??';
-    if (!flashBytesValue && typeof flashId === 'number' && !Number.isNaN(flashId)) {
-      appendLog(
-        `Flash size detection fallback unavailable. Flash ID 0x${flashId
-          .toString(16)
-          .padStart(6, '0')
-          .toUpperCase()} (manuf=0x${toHexByte(manufacturerCode)}, type=0x${toHexByte(
-            memoryTypeCode
-          )}, cap=0x${toHexByte(capacityCodeRaw)}).`,
-        '[warn]'
-      );
-    }
-    flashSizeBytes.value = flashBytesValue;
-    const flashLabel =
-      flashBytesValue && flashBytesValue > 0
-        ? `${formatBytes(flashBytesValue)}${flashLabelSuffix}`
-        : 'Flash size not detected';
-        
     const crystalLabel =
       typeof crystalFreq === 'number' ? `${Number(crystalFreq).toFixed(0)} MHz` : null;
     const macLabel = macAddress || 'Unavailable';
