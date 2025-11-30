@@ -4673,6 +4673,13 @@ async function connect() {
     currentBaud.value = connectBaud;
     transport.value.baudrate = connectBaud;
 
+    try {
+      await transport.value.flushInput();
+      appendLog('Serial input flushed before handshake.', '[ESPConnect-Debug]');
+    } catch (err) {
+      appendLog(`Warning: unable to flush serial input before handshake (${formatErrorMessage(err)}).`, '[ESPConnect-Warn]');
+    }
+
     connectDialog.message = 'Handshaking with ROM bootloader...';
     const { chipName, chip } = await esptool.connectAndHandshake();
     currentBaud.value = desiredBaud || connectBaud;
