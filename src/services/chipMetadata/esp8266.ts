@@ -53,15 +53,11 @@ type Loader = {
   macAddr?: () => number[];
   readReg: (addr: number) => Promise<number>;
   transport?: { baudrate?: number };
-  debug?: (msg: string) => void;
-  info?: (msg: string) => void;
-  error?: (msg: string) => void;
 };
 
 export async function readEsp8266Metadata(loader: Loader) {
   const readEfuse = async (offset: number) => {
     const addr = EFUSE_RD_REG_BASE + 4 * offset;
-    loader.debug?.(`Read efuse ${addr}`);
     return loader.readReg(addr);
   };
 
@@ -84,11 +80,11 @@ export async function readEsp8266Metadata(loader: Loader) {
     const baud = loader.transport?.baudrate ?? 115200;
     const etsXtal = (baud * uartDiv) / 1000000 / XTAL_CLK_DIVIDER;
     const normXtal = etsXtal > 33 ? 40 : 26;
-    if (Math.abs(normXtal - etsXtal) > 1 && typeof loader.info === 'function') {
-      loader.info(
-        `WARNING: Detected crystal freq ${etsXtal}MHz is quite different to normalized freq ${normXtal}MHz. Unsupported crystal in use?`,
-      );
-    }
+    // if (Math.abs(normXtal - etsXtal) > 1 && typeof loader.info === 'function') {
+    //   loader.info(
+    //     `WARNING: Detected crystal freq ${etsXtal}MHz is quite different to normalized freq ${normXtal}MHz. Unsupported crystal in use?`,
+    //   );
+    // }
     return normXtal;
   };
 
