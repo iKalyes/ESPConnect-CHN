@@ -71,6 +71,16 @@ export const JEDEC_FLASH_PARTS: Record<number, Record<number, string>> = {
   },
 };
 
+export const JEDEC_CAPACITY_CODES: Record<number, number> = {
+  0x14: 1 * 1024 * 1024,      // 1 MB
+  0x15: 2 * 1024 * 1024,      // 2 MB
+  0x16: 4 * 1024 * 1024,      // 4 MB
+  0x17: 8 * 1024 * 1024,      // 8 MB
+  0x18: 16 * 1024 * 1024,     // 16 MB
+  0x19: 32 * 1024 * 1024,     // 32 MB
+  0x20: 64 * 1024 * 1024,     // 64 MB
+};
+
 export const VENDOR_ALIASES: Record<string, string> = {
   AP_3v3: 'AP Memory 3.3 V',
   AP_1v8: 'AP Memory 1.8 V',

@@ -658,7 +658,7 @@ import {
   asciiDecoder,
 } from './constants/app';
 import { PACKAGE_LABELS, ECO_LABELS, EMBEDDED_FLASH_CAPACITY, EMBEDDED_PSRAM_CAPACITY, PACKAGE_FORM_FACTORS } from './constants/chipLabels';
-import { JEDEC_FLASH_PARTS, JEDEC_MANUFACTURERS, VENDOR_ALIASES } from './constants/flashIds';
+import { JEDEC_FLASH_PARTS, JEDEC_MANUFACTURERS, VENDOR_ALIASES, JEDEC_CAPACITY_CODES } from './constants/flashIds';
 import {
   getUsbDeviceInfo, DEFAULT_FLASH_BAUD,
   DEFAULT_ROM_BAUD,
@@ -5344,9 +5344,10 @@ async function connect() {
         .toUpperCase()}`;
       const manufacturerName = JEDEC_MANUFACTURERS[manufacturerCode];
       const deviceName = JEDEC_FLASH_PARTS[manufacturerCode]?.[deviceCode];
-      const capacityBytes = Number.isInteger(capacityCode) ? 2 ** capacityCode : null;
-      const formattedCapacity = capacityBytes ? formatBytes(capacityBytes) : null;
+      const capacityBytes = JEDEC_CAPACITY_CODES[capacityCode] ?? null;
 
+      const formattedCapacity = capacityBytes !== null ? formatBytes(capacityBytes) : null;
+      
       pushFact('Flash ID', `0x${flashId.toString(16).padStart(6, '0').toUpperCase()}`);
       pushFact(
         'Flash Manufacturer',
