@@ -3226,6 +3226,10 @@ type DownloadFlashPayload = {
   fileName?: string;
 };
 
+type CancelDownloadOptions = {
+  label?: string;
+};
+
 // Write a filesystem image to flash with progress callbacks.
 async function writeFilesystemImage(partition: any, image: Uint8Array | ArrayBuffer, options: WriteFilesystemOptions = {}) {
   const { onProgress, label = 'filesystem', state, compress = true } = options;
@@ -6211,7 +6215,7 @@ function handleCancelFlash() {
 }
 
 // Request cancellation of the current flash download.
-function handleCancelDownload(options = {}) {
+function handleCancelDownload(options: CancelDownloadOptions = {}) {
   if (downloadCancelRequested.value) {
     return;
   }
