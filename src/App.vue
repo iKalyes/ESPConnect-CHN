@@ -1672,10 +1672,10 @@ async function handleLittlefsView(path) {
       );
     }
     if (viewInfo.mode === 'image') {
-      const blob = new Blob([data], { type: viewInfo.mime || 'image/*' });
+      const blob = new Blob([toArrayBuffer(data)], { type: viewInfo.mime || 'image/*' });
       spiffsViewerDialog.imageUrl = URL.createObjectURL(blob);
     } else if (viewInfo.mode === 'audio') {
-      const blob = new Blob([data], { type: viewInfo.mime || 'audio/*' });
+      const blob = new Blob([toArrayBuffer(data)], { type: viewInfo.mime || 'audio/*' });
       spiffsViewerDialog.audioUrl = URL.createObjectURL(blob);
     } else {
       spiffsViewerDialog.content = SPIFFS_VIEWER_DECODER.decode(data);
@@ -2222,10 +2222,10 @@ async function handleFatfsView(name) {
       );
     }
     if (viewInfo.mode === 'image') {
-      const blob = new Blob([data], { type: viewInfo.mime || 'image/*' });
+      const blob = new Blob([toArrayBuffer(data)], { type: viewInfo.mime || 'image/*' });
       spiffsViewerDialog.imageUrl = URL.createObjectURL(blob);
     } else if (viewInfo.mode === 'audio') {
-      const blob = new Blob([data], { type: viewInfo.mime || 'audio/*' });
+      const blob = new Blob([toArrayBuffer(data)], { type: viewInfo.mime || 'audio/*' });
       spiffsViewerDialog.audioUrl = URL.createObjectURL(blob);
     } else {
       spiffsViewerDialog.content = SPIFFS_VIEWER_DECODER.decode(data);
@@ -2357,7 +2357,7 @@ function formatUsbBridge(info) {
 function saveBinaryFile(name, data) {
   if (!data) return;
   const safeName = sanitizeFileName(name, 'download');
-  const blob = new Blob([data], { type: 'application/octet-stream' });
+  const blob = new Blob([toArrayBuffer(data)], { type: 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   try {
     const anchor = document.createElement('a');
@@ -2522,6 +2522,17 @@ function resolveSpiffsViewInfo(name = '') {
 // Tell whether a SPIFFS backup exists for this session.
 function hasSpiffsBackup() {
   return Boolean(spiffsState.backupDone || spiffsState.sessionBackupDone);
+}
+
+// Normalize a Uint8Array into an ArrayBuffer slice (avoids SharedArrayBuffer typing issues).
+function toArrayBuffer(view: Uint8Array): ArrayBuffer {
+  const { buffer, byteOffset, byteLength } = view;
+  if (buffer instanceof ArrayBuffer) {
+    return buffer.slice(byteOffset, byteOffset + byteLength);
+  }
+  const copy = new Uint8Array(byteLength);
+  copy.set(new Uint8Array(buffer, byteOffset, byteLength));
+  return copy.buffer;
 }
 
 // Ensure SPIFFS has a selected partition and is loaded when needed.
@@ -2909,10 +2920,10 @@ async function handleSpiffsView(name) {
       );
     }
     if (viewInfo.mode === 'image') {
-      const blob = new Blob([data], { type: viewInfo.mime || 'image/*' });
+      const blob = new Blob([data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)], { type: viewInfo.mime || 'image/*' });
       spiffsViewerDialog.imageUrl = URL.createObjectURL(blob);
     } else if (viewInfo.mode === 'audio') {
-      const blob = new Blob([data], { type: viewInfo.mime || 'audio/*' });
+      const blob = new Blob([data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)], { type: viewInfo.mime || 'audio/*' });
       spiffsViewerDialog.audioUrl = URL.createObjectURL(blob);
     } else {
       spiffsViewerDialog.content = SPIFFS_VIEWER_DECODER.decode(data);
