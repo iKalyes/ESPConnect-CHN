@@ -3148,9 +3148,17 @@ async function handleSpiffsSave() {
   }
 }
 
+type WriteFilesystemProgress = { value?: number; label?: string; written: number; total: number };
+type WriteFilesystemOptions = {
+  onProgress?: (progress: WriteFilesystemProgress) => void;
+  label?: string;
+  state?: { status?: string };
+  compress?: boolean;
+};
+
 // Write a filesystem image to flash with progress callbacks.
-async function writeFilesystemImage(partition, image, options = {}) {
-  const { onProgress, label = 'filesystem', state, compress = true } = options ?? {};
+async function writeFilesystemImage(partition: any, image: Uint8Array | ArrayBuffer, options: WriteFilesystemOptions = {}) {
+  const { onProgress, label = 'filesystem', state, compress = true } = options;
   if (!loader.value) {
     throw new Error('Loader unavailable.');
   }
