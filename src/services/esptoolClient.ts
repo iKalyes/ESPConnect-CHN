@@ -90,35 +90,33 @@ export class CompatibleTransport {
   device: SerialPort;
   baudrate: number;
   tracing: boolean;
-  private readonly getLoader: () => CompatibleLoader | null;
+  loader:CompatibleLoader;
   private readonly isBusy: BusyGetter;
 
   constructor(
     device: SerialPort,
     tracing: boolean,
-    getLoader: () => CompatibleLoader | null,
+    loader:CompatibleLoader,
     isBusy: BusyGetter,
   ) {
     this.device = device;
     this.tracing = tracing;
     this.baudrate = ESP_ROM_BAUD;
-    this.getLoader = getLoader;
     this.isBusy = isBusy;
+    this.loader = loader;
   }
 
   async flushInput() {
-    const loader = this.getLoader();
-    const buffer = getInputBuffer(loader);
+    const buffer = getInputBuffer(this.loader);
     if (buffer) {
       buffer.length = 0;
     }
   }
 
   async disconnect() {
-    const loader = this.getLoader();
-    if (loader?.disconnect) {
+    if (this.loader) {
       try {
-        const maybeDisconnect = loader.disconnect();
+        const maybeDisconnect = this.loader.disconnect();
         // Guard against hanging if the device is already gone.
         await Promise.race([maybeDisconnect, sleep(800)]);
       } catch {
@@ -135,15 +133,14 @@ export class CompatibleTransport {
   async *rawRead() {
     // Stream raw bytes from the loader's shared input buffer without fighting the bootloader reader lock.
     while (true) {
-      const loader = this.getLoader();
-      if (!loader) {
+      if (!this.loader) {
         break;
       }
       if (this.isBusy()) {
         await sleep(25);
         continue;
       }
-      const buffer = getInputBuffer(loader);
+      const buffer = getInputBuffer(this.loader);
       if (buffer && buffer.length > 0) {
         const chunk = new Uint8Array(buffer.splice(0));
         if (chunk.length > 0) {
@@ -287,8 +284,7 @@ export function createEsptoolClient({
     },
   });
 
-  const getLoader = () => loader ?? null;
-  const transport = new CompatibleTransport(port, debugSerial ?? false, getLoader, isBusy);
+  const transport = new CompatibleTransport(port, debugSerial ?? false, loader, isBusy);
 
   const status = (msg: string) => onStatus?.(msg);
 
