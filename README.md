@@ -133,7 +133,7 @@ export const skipPatterns = [
 
 ## 快速开始
 
-1. 打开（官方英文版） [ESPConnect - Original Website None Translated](https://thelastoutpostworkshop.github.io/microcontroller_devkit/espconnect/)
+1. 打开（官方英文版） [ESPConnect - Original Website None Translated](https://thelastoutpostworkshop.github.io/microcontroller_devkit/espconnect/)  
 或打开中文版网页 [中文网页 - Chinese Website](https://ikalyes.github.io/ESPConnect-CHN/)
 2. 点击 **连接**，在浏览器弹出的对话框中选择您的设备
 3. 握手完成后，导航栏将解锁所有工具：设备信息、分区表、SPIFFS、应用、烧录工具、串口终端和日志
