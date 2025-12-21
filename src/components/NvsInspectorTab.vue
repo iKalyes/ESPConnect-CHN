@@ -36,7 +36,7 @@
             </v-chip>
 
             <v-tooltip
-              :text="`${validPages.toLocaleString()} valid, ${invalidPages.toLocaleString()} invalid`"
+              :text="`total: ${pageStats.total.toLocaleString()} \u00b7 in-use: ${pageStats.inUse.toLocaleString()} \u00b7 blank: ${pageStats.blank.toLocaleString()} \u00b7 bad: ${pageStats.bad.toLocaleString()}`"
               location="bottom"
             >
               <template #activator="{ props: tooltipProps }">
@@ -228,10 +228,16 @@
             </v-alert>
 
             <v-card v-else variant="tonal">
-              <v-card-title class="d-flex align-center justify-space-between">
+              <v-card-title class="nvs-inspector__pages-title">
                 <span>Pages</span>
-                <v-chip size="large" variant="tonal" color="primary">
-                  {{ result.pages.length.toLocaleString() }} total
+                <v-chip size="small" variant="tonal" color="primary" class="nvs-inspector__pages-summary">
+                  total: {{ pageStats.total.toLocaleString() }}
+                  <span class="text-medium-emphasis">&middot;</span>
+                  in-use: {{ pageStats.inUse.toLocaleString() }}
+                  <span class="text-medium-emphasis">&middot;</span>
+                  blank: {{ pageStats.blank.toLocaleString() }}
+                  <span class="text-medium-emphasis">&middot;</span>
+                  bad: {{ pageStats.bad.toLocaleString() }}
                 </v-chip>
               </v-card-title>
 
@@ -242,7 +248,7 @@
                       <th class="text-start">Page #</th>
                       <th class="text-start">State</th>
                       <th class="text-end">Seq</th>
-                      <th class="text-center">Valid</th>
+                      <th class="text-center">Status</th>
                       <th class="text-end">Errors</th>
                     </tr>
                   </thead>
@@ -251,11 +257,22 @@
                       <td><code>{{ page.index }}</code></td>
                       <td><code>{{ page.state }}</code></td>
                       <td class="text-end">
-                        <span v-if="typeof page.seq === 'number'">{{ page.seq.toLocaleString() }}</span>
+                        <span
+                          v-if="
+                            page.state !== 'UNINITIALIZED' &&
+                            typeof page.seq === 'number' &&
+                            page.seq !== 0xffffffff
+                          "
+                        >
+                          {{ page.seq.toLocaleString() }}
+                        </span>
                         <span v-else class="text-medium-emphasis">&mdash;</span>
                       </td>
                       <td class="text-center">
-                        <v-chip v-if="page.valid" size="small" color="success" variant="tonal">OK</v-chip>
+                        <v-chip v-if="page.state === 'UNINITIALIZED'" size="small" color="grey-darken-1" variant="tonal"
+                          >Blank</v-chip
+                        >
+                        <v-chip v-else-if="page.valid" size="small" color="success" variant="tonal">OK</v-chip>
                         <v-chip v-else size="small" color="error" variant="tonal">BAD</v-chip>
                       </td>
                       <td class="text-end">
@@ -390,8 +407,26 @@ const headers: DataTableHeader[] = [
 // FIX: avoid shadowing props.hasPartition with a computed of the same name
 const hasPartitionSelected = computed(() => props.hasPartition && Boolean(props.selectedPartitionId));
 
-const validPages = computed(() => (props.result?.pages ?? []).filter(page => Boolean(page?.valid)).length);
-const invalidPages = computed(() => (props.result?.pages?.length ?? 0) - validPages.value);
+const pageStats = computed(() => {
+  const pages = props.result?.pages ?? [];
+
+  let blank = 0;
+  let bad = 0;
+  for (const page of pages) {
+    if (!page) continue;
+    if (page.state === 'UNINITIALIZED') {
+      blank += 1;
+      continue;
+    }
+    if (!page.valid) {
+      bad += 1;
+    }
+  }
+
+  const total = pages.length;
+  const inUse = Math.max(total - blank, 0);
+  return { total, inUse, blank, bad };
+});
 
 function unwrapItem(item: unknown) {
   // Vuetify wraps items; keep defensive to avoid UI crashes on malformed data.
@@ -482,5 +517,21 @@ const filteredEntries = computed(() => {
 
 .nvs-inspector__pages-table code {
   font-size: 0.85rem;
+}
+
+.nvs-inspector__pages-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.nvs-inspector__pages-summary {
+  max-width: 100%;
+}
+
+.nvs-inspector__pages-summary :deep(.v-chip__content) {
+  white-space: normal;
 }
 </style>
