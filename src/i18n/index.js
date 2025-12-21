@@ -207,6 +207,19 @@ function reverseTranslateText(text) {
     return text.replace(trimmed, `Offset ${offsetSizeMatch[1]} • Size ${offsetSizeMatch[2]}`);
   }
 
+  // ==================== 文件系统写入确认框反向翻译 ====================
+  // "新增: filename.txt (10.4 KB)" -> "Added: filename.txt (10.4 KB)"
+  const addedMatch = trimmed.match(/^新增:\s*(.+)$/);
+  if (addedMatch) {
+    return text.replace(trimmed, `Added: ${addedMatch[1]}`);
+  }
+  
+  // "修改: filename.txt (10.4 KB)" -> "Modified: filename.txt (10.4 KB)"
+  const modifiedMatch = trimmed.match(/^修改:\s*(.+)$/);
+  if (modifiedMatch) {
+    return text.replace(trimmed, `Modified: ${modifiedMatch[1]}`);
+  }
+
   // "已使用 45%（1.2 MB / 2.8 MB）" -> "Used 45% (1.2 MB / 2.8 MB)"
   const usedPercentMatch = trimmed.match(/^已使用\s+(\d+)%（(.+?)\s*\/\s*(.+?)）$/);
   if (usedPercentMatch) {

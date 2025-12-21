@@ -452,6 +452,9 @@ export const translations = {
   'Restoring LittleFS': '正在恢复 LittleFS',
   'Preparing backup...': '正在准备备份...',
   'Writing LittleFS image...': '正在写入 LittleFS 镜像...',
+  'Write LittleFS to Flash': '写入 LittleFS 到 Flash',
+  'Format LittleFS': '格式化 LittleFS',
+  'Erase all files from the LittleFS image? You must Save to apply.': '删除 LittleFS 镜像中的所有文件？需要保存才能生效。',
   
   // FATFS 对话框
   'FATFS Backup': 'FATFS 备份',
@@ -459,6 +462,9 @@ export const translations = {
   'Saving FATFS': '正在保存 FATFS',
   'Restoring FATFS': '正在恢复 FATFS',
   'Writing FATFS image...': '正在写入 FATFS 镜像...',
+  'Write FATFS to Flash': '写入 FATFS 到 Flash',
+  'Format FATFS': '格式化 FATFS',
+  'Erase all files from the FATFS image? You must Save to apply.': '删除 FATFS 镜像中的所有文件？需要保存才能生效。',
   
   // SPIFFS 对话框
   'SPIFFS Backup': 'SPIFFS 备份',
@@ -467,6 +473,10 @@ export const translations = {
   'Restoring SPIFFS': '正在恢复 SPIFFS',
   'Writing SPIFFS image...': '正在写入 SPIFFS 镜像...',
   'Reading SPIFFS...': '正在读取 SPIFFS...',
+  'Write SPIFFS to Flash': '写入 SPIFFS 到 Flash',
+  'Write these changes to flash now?': '立即将这些更改写入 Flash？',
+  'Format SPIFFS': '格式化 SPIFFS',
+  'Erase all files from the SPIFFS image? You must Save to apply.': '删除 SPIFFS 镜像中的所有文件？需要保存才能生效。',
   
   // 通用进度对话框
   'Reading partition data...': '正在读取分区数据...',
@@ -556,6 +566,23 @@ export const translations = {
  * 格式: { pattern: RegExp, replacement: string | function }
  */
 export const regexTranslations = [
+  // ==================== 文件系统写入确认框 ====================
+  // "Added: filename.txt (10.4 KB), filename2.png (201.2 KB)" -> "新增: filename.txt (10.4 KB), filename2.png (201.2 KB)"
+  {
+    pattern: /^Added:\s*(.+)$/,
+    replacement: '新增: $1'
+  },
+  // "Modified: filename.txt (10.4 KB)" -> "修改: filename.txt (10.4 KB)"
+  {
+    pattern: /^Modified:\s*(.+)$/,
+    replacement: '修改: $1'
+  },
+  // "Deleted: filename.txt" -> "删除: filename.txt"
+  {
+    pattern: /^Deleted:\s*(.+)$/,
+    replacement: '删除: $1'
+  },
+  
   // 示例: "3 capabilities" -> "3 项功能"
   {
     pattern: /^(\d+)\s+capabilities$/,
