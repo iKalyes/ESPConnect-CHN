@@ -52,7 +52,7 @@ ESPConnect is a browser-based control center for ESP32- and ESP8266-class boards
 
 ESPConnect includes an **experimental NVS Inspector** that lets you **read and visualize** the contents of an ESP32’s NVS (Non-Volatile Storage) partition directly from the browser.
 
-#### What it can do
+ What it can do
 - Detect NVS format (**v1 / v2**) automatically
 - List namespaces and keys
 - Decode common value types (integers, strings, blobs)
@@ -60,13 +60,13 @@ ESPConnect includes an **experimental NVS Inspector** that lets you **read and v
 - Show page state, sequence numbers, CRC status, and entry usage
 - Visualize page layout and occupancy
 
-#### Limitations
+ Limitations
 - **Read-only** (no editing or writing)
 - Parsing is based on reverse-engineering ESP-IDF behavior and may not handle all edge cases
 - Some value types may be shown as raw blobs
 - Corrupt or partially erased pages may produce warnings
 
-#### Status
+Status
 > ⚠️ This feature is **experimental** and intended for **inspection and debugging only**.  
 > Output should not be considered authoritative for recovery or forensic use.
 
