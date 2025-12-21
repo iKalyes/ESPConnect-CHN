@@ -255,7 +255,7 @@ export const translations = {
     '固件工具仅供高级用户使用。写入或擦除 Flash 可能会永久删除数据或导致微控制器无法启动。请在操作前仔细检查设置。',
   'Download Selected Partition': '下载选定分区',
   'Download All Partitions': '下载所有分区',
-  'Download Used Flash': '下载已用 Flash',
+  'Download Flash Backup': '下载 Flash 备份',
   'Start offset': '起始偏移地址',
   'Length (bytes)': '长度（字节）',
   'Download Flash Region': '下载 Flash 区域',
