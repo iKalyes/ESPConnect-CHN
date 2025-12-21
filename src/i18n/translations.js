@@ -477,6 +477,7 @@ export const translations = {
   'Write these changes to flash now?': '立即将这些更改写入 Flash？',
   'Format SPIFFS': '格式化 SPIFFS',
   'Erase all files from the SPIFFS image? You must Save to apply.': '删除 SPIFFS 镜像中的所有文件？需要保存才能生效。',
+  'No file-level changes detected (still writing updated image).': '未检测到文件级别更改（仍会写入更新的镜像）。',
   
   // 通用进度对话框
   'Reading partition data...': '正在读取分区数据...',
@@ -576,6 +577,11 @@ export const regexTranslations = [
   {
     pattern: /^Modified:\s*(.+)$/,
     replacement: '修改: $1'
+  },
+  // "Removed: filename.txt" -> "移除: filename.txt"
+  {
+    pattern: /^Removed:\s*(.+)$/,
+    replacement: '移除: $1'
   },
   // "Deleted: filename.txt" -> "删除: filename.txt"
   {

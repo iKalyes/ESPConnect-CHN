@@ -64,6 +64,37 @@ function translateText(text) {
     }
   }
 
+  // 如果文本包含换行符，尝试分行翻译
+  if (trimmed.includes('\n')) {
+    const lines = text.split('\n');
+    let hasTranslation = false;
+    const translatedLines = lines.map(line => {
+      const lineTrimmed = line.trim();
+      if (!lineTrimmed) return line;
+      
+      // 精确匹配
+      if (translations[lineTrimmed]) {
+        hasTranslation = true;
+        return line.replace(lineTrimmed, translations[lineTrimmed]);
+      }
+      
+      // 正则匹配
+      for (const rule of regexTranslations) {
+        if (rule.pattern.test(lineTrimmed)) {
+          hasTranslation = true;
+          const translated = lineTrimmed.replace(rule.pattern, rule.replacement);
+          return line.replace(lineTrimmed, translated);
+        }
+      }
+      
+      return line;
+    });
+    
+    if (hasTranslation) {
+      return translatedLines.join('\n');
+    }
+  }
+
   return text;
 }
 
@@ -218,6 +249,12 @@ function reverseTranslateText(text) {
   const modifiedMatch = trimmed.match(/^修改:\s*(.+)$/);
   if (modifiedMatch) {
     return text.replace(trimmed, `Modified: ${modifiedMatch[1]}`);
+  }
+  
+  // "移除: filename.txt" -> "Removed: filename.txt"
+  const removedMatch = trimmed.match(/^移除:\s*(.+)$/);
+  if (removedMatch) {
+    return text.replace(trimmed, `Removed: ${removedMatch[1]}`);
   }
 
   // "已使用 45%（1.2 MB / 2.8 MB）" -> "Used 45% (1.2 MB / 2.8 MB)"
