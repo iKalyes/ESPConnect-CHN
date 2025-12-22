@@ -1,4 +1,4 @@
-[<img src="https://github.com/thelastoutpostworkshop/images/blob/main/ESPConnect-github.png">](https://youtu.be/-nhDKzBxHiI)
+﻿[<img src="https://github.com/thelastoutpostworkshop/images/blob/main/ESPConnect-github.png">](https://youtu.be/-nhDKzBxHiI)
 
 # ESPConnect 中文版
 
@@ -20,7 +20,6 @@ ESPConnect 是一个基于浏览器的 ESP32 和 ESP8266 系列开发板控制�
 本中文版采用了一套**最低限度侵入的翻译系统**，仅需在 `main.js` 中添加两行代码：
 
 ```
-// 国际化支持 - 只需这一行即可启用中英文切换
 import { initI18n } from './i18n/index.js';
 initI18n();
 ```
@@ -171,6 +170,30 @@ export const skipPatterns = [
 
 - **串口终端页** – 流式传输 UART 输出、发送命令、清空终端、更改波特率或直接从浏览器重置开发板
 - **会话日志页** – 连接、烧录、下载和警告的时间顺序记录。随时清空以获得干净的状态
+
+### NVS 检查器（🧪 实验性功能）
+
+ESPConnect 包含一个**实验性 NVS 检查器**，让您可以直接在浏览器中**读取和可视化** ESP32 的 NVS（非易失性存储）分区内容。
+
+ 功能特性
+- 自动检测 NVS 格式（**v1 / v2**）
+- 列出命名空间和键
+- 解码常见值类型（整数、字符串、二进制数据）
+- 启发式解码浮点数和双精度浮点数
+- 显示页面状态、序列号、CRC 状态和条目使用情况
+- 可视化页面布局和占用率
+
+ 限制条件
+- **只读**（不支持编辑或写入）
+- 解析基于对 ESP-IDF 行为的逆向工程，可能无法处理所有边缘情况
+- 某些值类型可能显示为原始二进制数据
+- 损坏或部分擦除的页面可能产生警告
+
+状态
+> ⚠️ 此功能为**实验性功能**，仅用于**检查和调试目的**。  
+> 输出结果不应作为数据恢复或取证用途的权威依据。
+
+欢迎提供反馈和测试报告。
 
 ## 本地化说明
 
