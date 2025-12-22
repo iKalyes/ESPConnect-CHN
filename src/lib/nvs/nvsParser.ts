@@ -18,12 +18,16 @@ export type NvsValueType =
 
 export type NvsDetectResult = { version: NvsVersion | 0; reason: string };
 
+export type EntryStateLabel = 'EMPTY' | 'WRITTEN' | 'ERASED' | 'ILLEGAL';
+
 export type NvsPageInfo = {
   index: number;
   state: string;
   seq: number | null;
   valid: boolean;
   errors: string[];
+  entryStates?: EntryStateLabel[];
+  entryCounts?: { written: number; erased: number; empty: number; illegal: number };
 };
 
 export type NvsNamespaceInfo = { id: number; name: string };
@@ -106,8 +110,6 @@ const PAGE_STATE_LABELS: Record<number, string> = {
   [PAGE_STATE.FREEING]: 'FREEING',
   [PAGE_STATE.CORRUPT]: 'CORRUPT',
 };
-
-type EntryStateLabel = 'EMPTY' | 'WRITTEN' | 'ERASED' | 'ILLEGAL';
 
 const ENTRY_STATE_LABELS: Record<number, EntryStateLabel> = {
   0x3: 'EMPTY',
@@ -346,23 +348,21 @@ function crc32Update(crc: number, data: Uint8Array, start = 0, length = data.len
   return c >>> 0;
 }
 
-function crc32Finalize(crc: number) {
-  return (crc ^ 0xffffffff) >>> 0;
+// ESP-IDF NVS uses `esp_crc32_le(0xffffffff, ...)` and stores the running value (no final XOR).
+function nvsCrc32(data: Uint8Array, start = 0, length = data.length - start) {
+  const running = crc32Update(0x00000000, data, start, length);
+  return (running ^ 0xffffffff) >>> 0;
 }
 
-// This matches what your NVS header CRC expects:
-function nvsCrc32(data: Uint8Array, start = 0, length = data.length - start) {
-  const crc = crc32Update(0x00000000, data, start, length);
-  return crc32Finalize(crc);
-}
 
 function computeItemCrc32(itemBytes: Uint8Array) {
   let crc = 0x00000000;
   crc = crc32Update(crc, itemBytes, 0, 4);
   crc = crc32Update(crc, itemBytes, 8, 16);
   crc = crc32Update(crc, itemBytes, 24, 8);
-  return crc32Finalize(crc);
+  return (crc ^ 0xffffffff) >>> 0;
 }
+
 
 function combineCrcOk(itemCrcOk: boolean | undefined, dataCrcOk: boolean | undefined) {
   if (itemCrcOk === false || dataCrcOk === false) return false;
@@ -421,6 +421,23 @@ function parseWithVersion(data: Uint8Array, version: NvsVersion): NvsParseResult
     const versionByte = view.getUint8(8);
     const storedHeaderCrc = readUint32Le(view, 28);
     const calcHeaderCrc = nvsCrc32(page, 4, 24);
+    if (pageIndex === 0) {
+      const a = crc32Update(0x00000000, page, 4, 24) >>> 0;
+      const b = (a ^ 0xffffffff) >>> 0;
+
+      const c = crc32Update(0xffffffff, page, 4, 24) >>> 0;
+      const d = (c ^ 0xffffffff) >>> 0;
+
+      console.debug(
+        `[NVS CRC VARIANTS] page=${pageIndex}`,
+        `stored=0x${storedHeaderCrc.toString(16)}`,
+        `init0=0x${a.toString(16)}`,
+        `init0^final=0x${b.toString(16)}`,
+        `initFF=0x${c.toString(16)}`,
+        `initFF^final=0x${d.toString(16)}`,
+      );
+    }
+
 
     if (state === PAGE_STATE.UNINITIALIZED) {
       headerCrcOk = true;
@@ -472,6 +489,29 @@ function parseWithVersion(data: Uint8Array, version: NvsVersion): NvsParseResult
       continue;
     }
 
+    const entryStates: EntryStateLabel[] = new Array(ENTRY_COUNT);
+    const entryCounts = { written: 0, erased: 0, empty: 0, illegal: 0 };
+    for (let entryIndex = 0; entryIndex < ENTRY_COUNT; entryIndex += 1) {
+      const wordIndex = entryIndex >> 4; // 16 entries per u32 word
+      const bitOffset = (entryIndex & 0x0f) * 2;
+      const stateBits = (entryTableWords[wordIndex] >>> bitOffset) & 0x3;
+      const entryState = ENTRY_STATE_LABELS[stateBits] ?? 'ILLEGAL';
+      entryStates[entryIndex] = entryState;
+      if (entryState === 'WRITTEN') {
+        entryCounts.written += 1;
+      } else if (entryState === 'ERASED') {
+        entryCounts.erased += 1;
+      } else if (entryState === 'EMPTY') {
+        entryCounts.empty += 1;
+      } else {
+        entryCounts.illegal += 1;
+      }
+    }
+
+    const pageInfo = pages[pages.length - 1];
+    pageInfo.entryStates = entryStates;
+    pageInfo.entryCounts = entryCounts;
+
     let skipRemaining = 0;
     for (let entryIndex = 0; entryIndex < ENTRY_COUNT; entryIndex += 1) {
       const entryOffset = ENTRY_DATA_OFFSET + entryIndex * ENTRY_SIZE;
@@ -482,10 +522,7 @@ function parseWithVersion(data: Uint8Array, version: NvsVersion): NvsParseResult
         break;
       }
 
-      const wordIndex = Math.floor(entryIndex / 16);
-      const bitOffset = (entryIndex % 16) * 2;
-      const stateBits = (entryTableWords[wordIndex] >>> bitOffset) & 0x3;
-      const entryState = ENTRY_STATE_LABELS[stateBits] ?? 'ILLEGAL';
+      const entryState = entryStates[entryIndex];
       if (entryState !== 'WRITTEN') continue;
 
       if (skipRemaining > 0) {

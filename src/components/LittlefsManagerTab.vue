@@ -227,86 +227,129 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import type { DataTableHeader } from 'vuetify';
+import type {
+  FilePreviewInfo,
+  FilePreviewInfoResolver,
+  FilePreviewMode,
+  FilesystemPartitionOption,
+  FilesystemUsage,
+  PartitionId,
+} from '../types/filesystem';
+import type { LittlefsDiskVersionFormatter, LittlefsEntry, LittlefsUploadPayload } from '../types/littlefs';
 
-const props = defineProps({
-  partitions: Array,
-  selectedPartitionId: [Number, String, null],
-  files: Array,
-  currentPath: {
-    type: String,
-    default: '/',
-  },
-  status: String,
-  loading: Boolean,
-  busy: Boolean,
-  saving: Boolean,
-  readOnly: Boolean,
-  readOnlyReason: String,
-  dirty: Boolean,
-  backupDone: Boolean,
-  error: String,
-  hasPartition: Boolean,
-  hasClient: Boolean,
-  usage: Object,
-  diskVersion: {
-    type: Number,
-    default: 0,
-  },
-  formatDiskVersion: Function,
-  uploadBlocked: Boolean,
-  uploadBlockedReason: String,
-  isFileViewable: {
-    type: Function,
-    default: () => false,
-  },
-  getFilePreviewInfo: Function,
-  fsLabel: {
-    type: String,
-    default: 'LittleFS',
-  },
-  partitionTitle: String,
-  loadCancelled: Boolean,
-  loadCancelledMessage: String,
-  readOnlyMessage: String,
-  emptyStateMessage: String,
-});
+type FileCategory = 'all' | 'text' | 'image' | 'audio' | 'other';
+type FileFilterOption = { value: FileCategory; label: string };
+type Breadcrumb = { label: string; path: string };
 
-const emit = defineEmits([
-  'select-partition',
-  'refresh',
-  'backup',
-  'restore',
-  'download-file',
-  'view-file',
-  'validate-upload',
-  'upload-file',
-  'delete-file',
-  'format',
-  'save',
-  'navigate',
-  'navigate-up',
-  'new-folder',
-  'reset-upload-block',
-]);
+const props = withDefaults(
+  defineProps<{
+    partitions?: FilesystemPartitionOption[];
+    selectedPartitionId?: PartitionId | null;
+    files?: LittlefsEntry[];
+    currentPath?: string;
+    status?: string;
+    loading?: boolean;
+    busy?: boolean;
+    saving?: boolean;
+    readOnly?: boolean;
+    readOnlyReason?: string;
+    dirty?: boolean;
+    backupDone?: boolean;
+    error?: string | null;
+    hasPartition?: boolean;
+    hasClient?: boolean;
+    usage?: FilesystemUsage;
+    diskVersion?: number;
+    formatDiskVersion?: LittlefsDiskVersionFormatter | null;
+    uploadBlocked?: boolean;
+    uploadBlockedReason?: string;
+    isFileViewable?: FilePreviewInfoResolver;
+    getFilePreviewInfo?: FilePreviewInfoResolver | null;
+    fsLabel?: string;
+    partitionTitle?: string;
+    loadCancelled?: boolean;
+    loadCancelledMessage?: string;
+    readOnlyMessage?: string;
+    emptyStateMessage?: string;
+  }>(),
+  {
+    partitions: () => [],
+    selectedPartitionId: null,
+    files: () => [],
+    currentPath: '/',
+    status: '',
+    loading: false,
+    busy: false,
+    saving: false,
+    readOnly: false,
+    readOnlyReason: '',
+    dirty: false,
+    backupDone: false,
+    error: null,
+    hasPartition: false,
+    hasClient: false,
+    usage: () => ({
+      capacityBytes: 0,
+      usedBytes: 0,
+      freeBytes: 0,
+    }),
+    diskVersion: 0,
+    formatDiskVersion: null,
+    uploadBlocked: false,
+    uploadBlockedReason: '',
+    isFileViewable: () => false,
+    getFilePreviewInfo: null,
+    fsLabel: 'LittleFS',
+    partitionTitle: '',
+    loadCancelled: false,
+    loadCancelledMessage: '',
+    readOnlyMessage: '',
+    emptyStateMessage: '',
+  },
+);
 
-const uploadFile = ref(null);
-const restoreInput = ref(null);
+const emit = defineEmits<{
+  (e: 'select-partition', value: PartitionId | null): void;
+  (e: 'refresh'): void;
+  (e: 'backup'): void;
+  (e: 'restore', file: File): void;
+  (e: 'download-file', path: string): void;
+  (e: 'view-file', path: string): void;
+  (e: 'validate-upload', file: File | null): void;
+  (e: 'upload-file', payload: LittlefsUploadPayload): void;
+  (e: 'delete-file', path: string): void;
+  (e: 'format'): void;
+  (e: 'save'): void;
+  (e: 'navigate', path: string): void;
+  (e: 'navigate-up'): void;
+  (e: 'new-folder', name: string): void;
+  (e: 'reset-upload-block'): void;
+}>();
+
+const uploadFile = ref<File | null>(null);
+const restoreInput = ref<HTMLInputElement | null>(null);
 const fileSearch = ref('');
 const filesPerPage = ref(25);
 const filesPage = ref(1);
-const fileTypeFilter = ref('all');
+const fileTypeFilter = ref<FileCategory>('all');
 const dragActive = ref(false);
-const dropQueue = ref([]);
+const dropQueue = ref<LittlefsUploadPayload[]>([]);
 
-const headers = [
+const headers = Object.freeze<DataTableHeader[]>([
   { title: 'Name', key: 'name', sortable: true, align: 'start' },
   { title: 'Size', key: 'size', sortable: true, align: 'start' },
   { title: 'Actions', key: 'actions', sortable: false, align: 'end' },
-];
-const filesPerPageOptions = Object.freeze([10, 25, 50, { value: -1, title: 'All' }]);
-const FILE_CATEGORY_LABELS = {
+]);
+const filesPerPageOptions = Object.freeze<Array<number | { value: number; title: string }>>([
+  10,
+  25,
+  50,
+  { value: -1, title: 'All' },
+]);
+const FILE_CATEGORY_LABELS: Record<FileCategory, string> = {
   all: 'All types',
   text: 'Text',
   image: 'Images',
@@ -314,7 +357,7 @@ const FILE_CATEGORY_LABELS = {
   other: 'Other',
 };
 
-const fileFilterOptions = computed(() => [
+const fileFilterOptions = computed<FileFilterOption[]>(() => [
   { label: `${FILE_CATEGORY_LABELS.all} (${props.files.length})`, value: 'all' },
 ]);
 
@@ -323,9 +366,9 @@ const hasPartition = computed(() => props.hasPartition);
 const hasClient = computed(() => props.hasClient);
 const atRoot = computed(() => props.currentPath === '/' || props.currentPath === '');
 
-const breadcrumbs = computed(() => {
+const breadcrumbs = computed<Breadcrumb[]>(() => {
   const segments = props.currentPath.split('/').filter(Boolean);
-  const crumbs = [{ label: '/', path: '/' }];
+  const crumbs: Breadcrumb[] = [{ label: '/', path: '/' }];
   let acc = '';
   segments.forEach(seg => {
     acc += `/${seg}`;
@@ -342,15 +385,15 @@ const usagePercent = computed(() => {
   return Math.min(100, Math.max(0, Number(val.toFixed(1))));
 });
 
-const selectedPartition = computed(() =>
-  props.partitions?.find(partition => partition.id === props.selectedPartitionId) ?? null,
+const selectedPartition = computed<FilesystemPartitionOption | null>(() =>
+  props.partitions.find(partition => partition.id === props.selectedPartitionId) ?? null,
 );
 
 const showLoadCancelledBanner = computed(() => props.loadCancelled === true);
 
 const filteredFiles = computed(() => {
   const term = fileSearch.value.trim().toLowerCase();
-  return (props.files || []).filter(file => {
+  return props.files.filter(file => {
     if (term && !file.name.toLowerCase().includes(term)) return false;
     return true;
   });
@@ -359,12 +402,16 @@ const filteredFiles = computed(() => {
 const fileCountLabel = computed(() => {
   const total = props.files.length;
   if (!total) return 'No files';
-  const pluralize = count => (count === 1 ? 'file' : 'files');
+  const pluralize = (count: number) => (count === 1 ? 'file' : 'files');
   return `${total} ${pluralize(total)}`;
 });
 
 watch([fileSearch, () => props.files.length], () => {
   filesPage.value = 1;
+});
+
+watch(uploadFile, file => {
+  emit('validate-upload', file ?? null);
 });
 
 const error = computed(() => props.error || null);
@@ -373,23 +420,37 @@ const readOnlyMessage = computed(() => props.readOnlyReason || 'This filesystem 
 const newFolderDialog = ref(false);
 const newFolderName = ref('');
 
-function toPreviewInfo(value) {
+function isPreviewMode(value: unknown): value is FilePreviewMode {
+  return value === 'text' || value === 'image' || value === 'audio';
+}
+
+function toPreviewInfo(value: unknown): FilePreviewInfo | null {
   if (!value) {
     return null;
   }
   if (typeof value === 'string') {
-    return { mode: value };
+    return isPreviewMode(value) ? { mode: value } : null;
   }
   if (value === true) {
     return { mode: 'text' };
   }
-  if (typeof value === 'object' && value.mode) {
-    return value;
+  if (typeof value === 'object' && value && 'mode' in value) {
+    const mode = (value as { mode?: unknown }).mode;
+    if (!isPreviewMode(mode)) {
+      return null;
+    }
+    const mime = (value as { mime?: unknown }).mime;
+    const ext = (value as { ext?: unknown }).ext;
+    return {
+      mode,
+      mime: typeof mime === 'string' ? mime : undefined,
+      ext: typeof ext === 'string' ? ext : undefined,
+    };
   }
   return null;
 }
 
-function getPreviewInfo(name) {
+function getPreviewInfo(name?: string): FilePreviewInfo | null {
   if (!name) {
     return null;
   }
@@ -405,11 +466,11 @@ function getPreviewInfo(name) {
   return null;
 }
 
-function isViewable(name) {
+function isViewable(name?: string): boolean {
   return Boolean(getPreviewInfo(name));
 }
 
-function previewIcon(name) {
+function previewIcon(name?: string): string {
   const info = getPreviewInfo(name);
   if (info?.mode === 'audio') {
     return 'mdi-headphones';
@@ -417,7 +478,7 @@ function previewIcon(name) {
   return 'mdi-eye';
 }
 
-function previewLabel(name) {
+function previewLabel(name?: string): string {
   const info = getPreviewInfo(name);
   if (info?.mode === 'audio') {
     return 'Listen';
@@ -425,11 +486,12 @@ function previewLabel(name) {
   return 'View';
 }
 
-function formatSize(bytes) {
-  if (!Number.isFinite(bytes)) return '';
-  if (bytes <= 0) return '0 B';
+function formatSize(bytes: unknown): string {
+  const value = typeof bytes === 'number' ? bytes : Number(bytes);
+  if (!Number.isFinite(value)) return '';
+  if (value <= 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
-  let val = bytes;
+  let val = value;
   let idx = 0;
   while (val >= 1024 && idx < units.length - 1) {
     val /= 1024;
@@ -447,7 +509,7 @@ const diskVersionLabel = computed(() => {
   return formatter(diskVersion.value);
 });
 
-function triggerRestore() {
+function triggerRestore(): void {
   const input = restoreInput.value;
   if (input) {
     input.value = '';
@@ -455,40 +517,60 @@ function triggerRestore() {
   }
 }
 
-function handleRestoreFile(event) {
-  const [file] = event.target.files || [];
+function handleRestoreFile(event: Event): void {
+  const input = event.target as HTMLInputElement | null;
+  const file = input?.files?.[0] ?? null;
   if (!file) return;
   emit('restore', file);
+  if (input) {
+    input.value = '';
+  }
 }
 
-function handleDragOver() {
+function handleDragOver(): void {
   if (props.readOnly || !props.hasClient || props.loading || props.busy || props.saving) return;
   dragActive.value = true;
 }
 
-function handleDragLeave() {
+function handleDragLeave(): void {
   dragActive.value = false;
 }
 
-function handleDrop(event) {
+function handleDrop(event: DragEvent): void {
   if (props.readOnly || !props.hasClient || props.loading || props.busy || props.saving) return;
   dragActive.value = false;
   const items = Array.from(event.dataTransfer?.items ?? []);
   const files = Array.from(event.dataTransfer?.files ?? []);
   if (!items.length && !files.length) return;
-  processDroppedItems(items, files);
+  void processDroppedItems(items, files);
 }
 
-async function processDroppedItems(items, fallbackFiles = []) {
+function getWebkitEntry(item: DataTransferItem): FileSystemEntry | null {
+  const maybe = item as DataTransferItem & { webkitGetAsEntry?: () => FileSystemEntry | null };
+  if (typeof maybe.webkitGetAsEntry !== 'function') {
+    return null;
+  }
+  return maybe.webkitGetAsEntry();
+}
+
+async function processDroppedItems(items: DataTransferItem[], fallbackFiles: File[] = []): Promise<void> {
   emit('reset-upload-block');
-  const entryMap = new Map(); // path -> payload
-  const filesForSizeCheck = [];
+  const entryMap = new Map<string, LittlefsUploadPayload>(); // path -> payload
+  const filesForSizeCheck: Array<{ size: number; path: string }> = [];
   let sawDirectory = false;
 
-  async function readAllEntries(reader) {
-    const out = [];
-    async function readChunk() {
-      const entries = await new Promise((resolve, reject) => {
+  function isFileEntry(entry: FileSystemEntry): entry is FileSystemFileEntry {
+    return entry.isFile && typeof (entry as Partial<FileSystemFileEntry>).file === 'function';
+  }
+
+  function isDirectoryEntry(entry: FileSystemEntry): entry is FileSystemDirectoryEntry {
+    return entry.isDirectory && typeof (entry as Partial<FileSystemDirectoryEntry>).createReader === 'function';
+  }
+
+  async function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+    const out: FileSystemEntry[] = [];
+    async function readChunk(): Promise<void> {
+      const entries = await new Promise<FileSystemEntry[]>((resolve, reject) => {
         reader.readEntries(resolve, reject);
       });
       if (entries.length) {
@@ -500,14 +582,16 @@ async function processDroppedItems(items, fallbackFiles = []) {
     return out;
   }
 
-  async function traverseEntry(entry, pathPrefix = '') {
+  async function traverseEntry(entry: FileSystemEntry | null, pathPrefix = ''): Promise<void> {
     if (!entry) return;
-    if (entry.isFile) {
-      const file = await new Promise(resolve => entry.file(resolve));
+    if (isFileEntry(entry)) {
+      const file = await new Promise<File>((resolve, reject) => {
+        entry.file(resolve, reject);
+      });
       const relPath = pathPrefix ? `${pathPrefix}/${file.name}` : file.name;
       entryMap.set(relPath, { file, path: relPath });
       filesForSizeCheck.push({ size: file.size, path: relPath });
-    } else if (entry.isDirectory) {
+    } else if (isDirectoryEntry(entry)) {
       const reader = entry.createReader();
       const entries = await readAllEntries(reader);
       const prefix = pathPrefix ? `${pathPrefix}/${entry.name}` : entry.name;
@@ -523,7 +607,7 @@ async function processDroppedItems(items, fallbackFiles = []) {
   }
 
   for (const item of items) {
-    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+    const entry = getWebkitEntry(item);
     if (entry) {
       await traverseEntry(entry);
     } else {
@@ -568,19 +652,20 @@ async function processDroppedItems(items, fallbackFiles = []) {
   }
 }
 
-function submitUpload() {
-  if (!uploadFile.value) return;
+function submitUpload(): void {
+  const file = uploadFile.value;
+  if (!file) return;
   emit('reset-upload-block');
-  emit('upload-file', { file: uploadFile.value, path: uploadFile.value.name });
+  emit('upload-file', { file, path: file.name });
   uploadFile.value = null;
 }
 
-function promptNewFolder() {
+function promptNewFolder(): void {
   newFolderName.value = '';
   newFolderDialog.value = true;
 }
 
-function confirmNewFolder() {
+function confirmNewFolder(): void {
   const name = newFolderName.value?.trim();
   if (!name) {
     newFolderDialog.value = false;

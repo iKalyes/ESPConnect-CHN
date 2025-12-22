@@ -125,38 +125,43 @@
   </Transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import DisconnectedState from './DisconnectedState.vue';
-import {PRIMARY_FACTS} from  '../constants/deviceFacts';
+import { PRIMARY_FACTS } from '../constants/deviceFacts';
+import type { DeviceDetails, DeviceFact } from '../types/device-details';
 
-const props = defineProps({
-  chipDetails: {
-    type: Object,
-    default: null,
+type DeviceDetailsWrapper = { value: DeviceDetails | null };
+
+const props = withDefaults(
+  defineProps<{
+    chipDetails?: DeviceDetails | DeviceDetailsWrapper | null;
+  }>(),
+  {
+    chipDetails: null,
   },
-});
+);
 
 const urlPattern = /^https?:\/\//i;
-const isUrl = value => typeof value === 'string' && urlPattern.test(value);
+const isUrl = (value: unknown): value is string => typeof value === 'string' && urlPattern.test(value);
 
-const details = computed(() => {
+const details = computed<DeviceDetails | null>(() => {
   const candidate = props.chipDetails;
   if (candidate && typeof candidate === 'object' && 'value' in candidate && !Array.isArray(candidate)) {
-    return candidate.value ?? null;
+    return (candidate as DeviceDetailsWrapper).value ?? null;
   }
-  return candidate ?? null;
+  return (candidate as DeviceDetails | null) ?? null;
 });
 
-const revisionLabel = computed(() => {
-  const facts = details.value?.facts;
-  if (!Array.isArray(facts)) return null;
-  return facts.find(fact => fact.label === 'Revision')?.value ?? null;
+const revisionLabel = computed<string | null>(() => {
+  return details.value?.facts.find(fact => fact.label === 'Revision')?.value ?? null;
 });
 
 const detailsKey = computed(() => {
   if (!details.value) return 'disconnected';
-  const signatureParts = [details.value.mac, revisionLabel.value, details.value.name].filter(Boolean);
+  const signatureParts = [details.value.mac, revisionLabel.value, details.value.name].filter(
+    (part): part is string => Boolean(part),
+  );
   return signatureParts.join('|');
 });
 
@@ -166,12 +171,12 @@ const hasDistinctDescription = computed(() => {
   return Boolean(description) && description !== name;
 });
 
-const primaryFacts = computed(() => {
-  const facts = Array.isArray(details.value?.facts) ? details.value.facts : [];
+const primaryFacts = computed<DeviceFact[]>(() => {
+  const facts = details.value?.facts ?? [];
   if (!facts.length) return [];
   const preferredOrder = PRIMARY_FACTS;
-  const selected = [];
-  const seen = new Set();
+  const selected: DeviceFact[] = [];
+  const seen = new Set<string>();
 
   for (const label of preferredOrder) {
     const match = facts.find(fact => fact.label === label && fact.value);
@@ -196,13 +201,13 @@ const primaryFacts = computed(() => {
 });
 
 const hasFeatures = computed(
-  () => Array.isArray(details.value?.features) && details.value.features.length > 0
+  () => (details.value?.features.length ?? 0) > 0
 );
 
-const featurePreview = computed(() => {
+const featurePreview = computed<string[]>(() => {
   if (!hasFeatures.value) return [];
   const limit = 6;
-  return details.value.features.slice(0, limit);
+  return details.value?.features.slice(0, limit) ?? [];
 });
 
 </script>

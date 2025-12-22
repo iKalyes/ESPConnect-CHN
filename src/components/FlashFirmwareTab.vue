@@ -293,188 +293,138 @@
   </v-dialog>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import type {
+  AlertType,
+  EraseFlashPayload,
+  FlashOffsetPreset,
+  FlashPartitionOption,
+  FirmwareInputValue,
+  PartitionOptionValue,
+  ProgressDialogState,
+  RegisterOption,
+  RegisterReference,
+} from '../types/flash-firmware';
 
-const props = defineProps({
-  flashOffset: {
-    type: String,
-    required: true,
+const props = withDefaults(
+  defineProps<{
+    flashOffset: string;
+    selectedPreset?: string | number | null;
+    offsetPresets?: FlashOffsetPreset[];
+    eraseFlash: boolean;
+    busy: boolean;
+    canFlash: boolean;
+    flashInProgress: boolean;
+    flashProgress: number;
+    flashProgressDialog?: ProgressDialogState;
+    maintenanceBusy?: boolean;
+    registerAddress?: string;
+    registerValue?: string;
+    registerOptions?: RegisterOption[];
+    registerReference?: RegisterReference | null;
+    registerReadResult?: string | null;
+    registerStatus?: string | null;
+    registerStatusType?: AlertType;
+    md5Offset?: string;
+    md5Length?: string;
+    md5Result?: string | null;
+    md5Status?: string | null;
+    md5StatusType?: AlertType;
+    flashReadOffset?: string;
+    flashReadLength?: string;
+    flashReadStatus?: string | null;
+    flashReadStatusType?: AlertType;
+    partitionOptions?: FlashPartitionOption[];
+    selectedPartition?: PartitionOptionValue | null;
+    integrityPartition?: PartitionOptionValue | null;
+    downloadProgress?: ProgressDialogState;
+  }>(),
+  {
+    selectedPreset: null,
+    offsetPresets: () => [],
+    maintenanceBusy: false,
+    registerAddress: '',
+    registerValue: '',
+    registerOptions: () => [],
+    registerReference: null,
+    registerReadResult: null,
+    registerStatus: null,
+    registerStatusType: 'info',
+    md5Offset: '0x0',
+    md5Length: '',
+    md5Result: null,
+    md5Status: null,
+    md5StatusType: 'info',
+    flashReadOffset: '0x0',
+    flashReadLength: '',
+    flashReadStatus: null,
+    flashReadStatusType: 'info',
+    partitionOptions: () => [],
+    selectedPartition: null,
+    integrityPartition: null,
+    flashProgressDialog: () => ({ visible: false, value: 0, label: '' }),
+    downloadProgress: () => ({ visible: false, value: 0, label: '' }),
   },
-  selectedPreset: {
-    type: [String, Number],
-    default: null,
-  },
-  offsetPresets: {
-    type: Array,
-    default: () => [],
-  },
-  eraseFlash: {
-    type: Boolean,
-    required: true,
-  },
-  busy: {
-    type: Boolean,
-    required: true,
-  },
-  canFlash: {
-    type: Boolean,
-    required: true,
-  },
-  flashInProgress: {
-    type: Boolean,
-    required: true,
-  },
-  flashProgress: {
-    type: Number,
-    required: true,
-  },
-  flashProgressDialog: {
-    type: Object,
-    default: () => ({ visible: false, value: 0, label: '' }),
-  },
-  maintenanceBusy: {
-    type: Boolean,
-    default: false,
-  },
-  registerAddress: {
-    type: String,
-    default: '',
-  },
-  registerValue: {
-    type: String,
-    default: '',
-  },
-  registerOptions: {
-    type: Array,
-    default: () => [],
-  },
-  registerReference: {
-    type: Object,
-    default: null,
-  },
-  registerReadResult: {
-    type: String,
-    default: null,
-  },
-  registerStatus: {
-    type: String,
-    default: null,
-  },
-  registerStatusType: {
-    type: String,
-    default: 'info',
-  },
-  md5Offset: {
-    type: String,
-    default: '0x0',
-  },
-  md5Length: {
-    type: String,
-    default: '',
-  },
-  md5Result: {
-    type: String,
-    default: null,
-  },
-  md5Status: {
-    type: String,
-    default: null,
-  },
-  md5StatusType: {
-    type: String,
-    default: 'info',
-  },
-  flashReadOffset: {
-    type: String,
-    default: '0x0',
-  },
-  flashReadLength: {
-    type: String,
-    default: '',
-  },
-  flashReadStatus: {
-    type: String,
-    default: null,
-  },
-  flashReadStatusType: {
-    type: String,
-    default: 'info',
-  },
-  partitionOptions: {
-    type: Array,
-    default: () => [],
-  },
-  selectedPartition: {
-    type: [String, Number],
-    default: null,
-  },
-  integrityPartition: {
-    type: [String, Number],
-    default: null,
-  },
-  downloadProgress: {
-    type: Object,
-    default: () => ({ visible: false, value: 0, label: '' }),
-  },
-});
+);
 
-const emit = defineEmits([
-  'update:flashOffset',
-  'update:selectedPreset',
-  'update:eraseFlash',
-  'firmware-input',
-  'flash',
-  'apply-preset',
-  'update:registerAddress',
-  'update:registerValue',
-  'read-register',
-  'write-register',
-  'update:md5Offset',
-  'update:md5Length',
-  'compute-md5',
-  'update:flashReadOffset',
-  'update:flashReadLength',
-  'update:selectedPartition',
-  'download-flash',
-  'download-partition',
-  'download-all-partitions',
-  'download-used-flash',
-  'cancel-flash',
-  'erase-flash',
-  'cancel-download',
-  'select-register',
-  'update:integrityPartition',
-]);
+const emit = defineEmits<{
+  (e: 'update:flashOffset', value: string): void;
+  (e: 'update:selectedPreset', value: string | number | null): void;
+  (e: 'update:eraseFlash', value: boolean): void;
+  (e: 'firmware-input', value: FirmwareInputValue): void;
+  (e: 'flash'): void;
+  (e: 'apply-preset', value: string | number | null): void;
+  (e: 'update:registerAddress', value: string): void;
+  (e: 'update:registerValue', value: string): void;
+  (e: 'read-register'): void;
+  (e: 'write-register'): void;
+  (e: 'update:md5Offset', value: string): void;
+  (e: 'update:md5Length', value: string): void;
+  (e: 'compute-md5'): void;
+  (e: 'update:flashReadOffset', value: string): void;
+  (e: 'update:flashReadLength', value: string): void;
+  (e: 'update:selectedPartition', value: PartitionOptionValue | null): void;
+  (e: 'download-flash'): void;
+  (e: 'download-partition'): void;
+  (e: 'download-all-partitions'): void;
+  (e: 'download-used-flash'): void;
+  (e: 'cancel-flash'): void;
+  (e: 'erase-flash', payload: EraseFlashPayload): void;
+  (e: 'cancel-download'): void;
+  (e: 'select-register', value: string | null): void;
+  (e: 'update:integrityPartition', value: PartitionOptionValue | null): void;
+}>();
 
-function handlePresetChange(value) {
+function handlePresetChange(value: string | number | null) {
   emit('update:selectedPreset', value);
   emit('apply-preset', value);
 }
 
-const selectedRegisterAddress = ref(null);
-const selectedRegisterInfo = ref(null);
-const integrityPartition = computed(() => props.integrityPartition ?? null);
+const selectedRegisterAddress = ref<string | null>(null);
+const selectedRegisterInfo = ref<RegisterOption | null>(null);
+const integrityPartition = computed<PartitionOptionValue | null>(() => props.integrityPartition ?? null);
 
-function handleIntegrityPartitionSelect(value) {
+function handleIntegrityPartitionSelect(value: PartitionOptionValue | null) {
   emit('update:integrityPartition', value);
 }
 
 const PARTITION_COLOR_FALLBACK = 'var(--v-theme-primary)';
 
-function resolvePartitionColor(option) {
-  if (option && typeof option === 'object' && option.color) {
-    return option.color;
+function resolvePartitionColor(option: unknown): string {
+  if (option && typeof option === 'object' && 'color' in option) {
+    const color = (option as { color?: unknown }).color;
+    if (typeof color === 'string' && color) {
+      return color;
+    }
   }
   return PARTITION_COLOR_FALLBACK;
 }
 
-function normalizeRegisterAddress(value) {
-  if (!value) return null;
-  if (typeof value !== 'string') {
-    value = String(value);
-  }
-  const trimmed = value.trim();
+function normalizeRegisterAddress(value: unknown): string | null {
+  if (value == null) return null;
+  const text = typeof value === 'string' ? value : String(value);
+  const trimmed = text.trim();
   if (!trimmed) return null;
   const numeric = trimmed.startsWith('0x') ? Number.parseInt(trimmed, 16) : Number.parseInt(trimmed, 10);
   if (!Number.isFinite(numeric)) return null;
@@ -491,14 +441,14 @@ function syncSelectedRegister() {
 }
 
 watch(
-  () => [props.registerAddress, props.registerOptions],
+  () => [props.registerAddress, props.registerOptions] as const,
   () => {
     syncSelectedRegister();
   },
-  { immediate: true }
+  { immediate: true },
 );
 
-function handleRegisterSelect(value) {
+function handleRegisterSelect(value: string | null) {
   if (!value) {
     selectedRegisterAddress.value = null;
     selectedRegisterInfo.value = null;

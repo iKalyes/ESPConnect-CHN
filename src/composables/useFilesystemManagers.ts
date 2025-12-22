@@ -1,4 +1,5 @@
 import { reactive, ref } from 'vue';
+import type { LittlefsEntry } from '../types/littlefs';
 
 export interface FatFSEntry {
   path: string;
@@ -114,8 +115,8 @@ export function useLittlefsManager(defaultBlockSize: number) {
     lastReadSize: 0,
     lastReadImage: null as Uint8Array | null,
     client: null as LittlefsClient | null,
-    files: [] as Array<{ name?: string; size?: number; path?: string; type?: string }>,
-    allFiles: [] as Array<{ name?: string; size?: number; path?: string; type?: string }>,
+    files: [] as LittlefsEntry[],
+    allFiles: [] as LittlefsEntry[],
     currentPath: '/' as string,
     status: 'Load a LittleFS partition to begin.',
     loading: false,
@@ -133,7 +134,7 @@ export function useLittlefsManager(defaultBlockSize: number) {
       usedBytes: 0,
       freeBytes: 0,
     },
-    baselineFiles: [] as Array<{ name?: string; size?: number }>,
+    baselineFiles: [] as LittlefsEntry[],
     uploadBlocked: false,
     uploadBlockedReason: '',
     blockSize: defaultBlockSize,

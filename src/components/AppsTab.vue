@@ -105,29 +105,25 @@
   </div>
 </template>
 
-<script setup>
-defineProps({
-  apps: {
-    type: Array,
-    default: () => [],
+<script setup lang="ts">
+import type { AppPartitionMetadata } from '../types/app-partitions';
+
+withDefaults(
+  defineProps<{
+    apps?: AppPartitionMetadata[];
+    activeSlotId?: string | null;
+    activeSummary?: string;
+    loading?: boolean;
+    error?: string | null;
+  }>(),
+  {
+    apps: () => [],
+    activeSlotId: null,
+    activeSummary: '',
+    loading: false,
+    error: null,
   },
-  activeSlotId: {
-    type: String,
-    default: null,
-  },
-  activeSummary: {
-    type: String,
-    default: '',
-  },
-  loading: {
-    type: Boolean,
-    default: false,
-  },
-  error: {
-    type: String,
-    default: null,
-  },
-});
+);
 </script>
 
 <style scoped>

@@ -1,0 +1,50 @@
+version: 2
+
+updates:
+  # ============================
+  # NPM / Web dependencies
+  # ============================
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "06:00"
+    open-pull-requests-limit: 5
+
+    # Group updates to reduce PR noise
+    groups:
+      production-deps:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+
+      dev-deps:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+
+    # Ignore major upgrades for core frameworks
+    ignore:
+      - dependency-name: "vue"
+        update-types: ["version-update:semver-major"]
+
+      - dependency-name: "vuetify"
+        update-types: ["version-update:semver-major"]
+
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+
+      - dependency-name: "@vue/*"
+        update-types: ["version-update:semver-major"]
+
+    # Clean, recognizable PR metadata
+    labels:
+      - "dependencies"
+      - "dependabot"
+
+    commit-message:
+      prefix: "deps"
+      include: "scope"

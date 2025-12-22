@@ -163,129 +163,131 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import type { DataTableHeader } from 'vuetify';
+import type {
+  FilePreviewInfo,
+  FilePreviewInfoResolver,
+  FilePreviewMode,
+  FilesystemEntry,
+  FilesystemPartitionOption,
+  FilesystemUploadPayload,
+  FilesystemUsage,
+  PartitionId,
+} from '../types/filesystem';
 
-const props = defineProps({
-  partitions: {
-    type: Array,
-    default: () => [],
-  },
-  selectedPartitionId: {
-    type: [Number, String, null],
-    default: null,
-  },
-  files: {
-    type: Array,
-    default: () => [],
-  },
-  status: {
-    type: String,
-    default: '',
-  },
-  loading: Boolean,
-  busy: Boolean,
-  saving: Boolean,
-  readOnly: Boolean,
-  readOnlyReason: {
-    type: String,
-    default: '',
-  },
-  dirty: Boolean,
-  backupDone: Boolean,
-  error: {
-    type: String,
-    default: null,
-  },
-  hasPartition: Boolean,
-  hasClient: Boolean,
-  usage: {
-    type: Object,
-    default: () => ({
+type FileCategory = 'all' | 'text' | 'image' | 'audio' | 'other';
+type FileFilterOption = { value: FileCategory; label: string };
+type DataTableSlotItem<T> = { raw?: T };
+
+const props = withDefaults(
+  defineProps<{
+    partitions?: FilesystemPartitionOption[];
+    selectedPartitionId?: PartitionId | null;
+    files?: FilesystemEntry[];
+    status?: string;
+    loading?: boolean;
+    busy?: boolean;
+    saving?: boolean;
+    readOnly?: boolean;
+    readOnlyReason?: string;
+    dirty?: boolean;
+    backupDone?: boolean;
+    error?: string | null;
+    hasPartition?: boolean;
+    hasClient?: boolean;
+    usage?: FilesystemUsage;
+    uploadBlocked?: boolean;
+    uploadBlockedReason?: string;
+    isFileViewable?: FilePreviewInfoResolver;
+    getFilePreviewInfo?: FilePreviewInfoResolver | null;
+    fsLabel?: string;
+    partitionTitle?: string;
+    emptyStateMessage?: string;
+    enablePreview?: boolean;
+    enableDownload?: boolean;
+    loadCancelled?: boolean;
+  }>(),
+  {
+    partitions: () => [],
+    selectedPartitionId: null,
+    files: () => [],
+    status: '',
+    loading: false,
+    busy: false,
+    saving: false,
+    readOnly: false,
+    readOnlyReason: '',
+    dirty: false,
+    backupDone: false,
+    error: null,
+    hasPartition: false,
+    hasClient: false,
+    usage: () => ({
       capacityBytes: 0,
       usedBytes: 0,
       freeBytes: 0,
     }),
+    uploadBlocked: false,
+    uploadBlockedReason: '',
+    isFileViewable: () => false,
+    getFilePreviewInfo: null,
+    fsLabel: 'SPIFFS',
+    partitionTitle: '',
+    emptyStateMessage: '',
+    enablePreview: true,
+    enableDownload: true,
+    loadCancelled: false,
   },
-  uploadBlocked: Boolean,
-  uploadBlockedReason: {
-    type: String,
-    default: '',
-  },
-  isFileViewable: {
-    type: Function,
-    default: () => false,
-  },
-  getFilePreviewInfo: {
-    type: Function,
-    default: null,
-  },
-  fsLabel: {
-    type: String,
-    default: 'SPIFFS',
-  },
-  partitionTitle: {
-    type: String,
-    default: '',
-  },
-  emptyStateMessage: {
-    type: String,
-    default: '',
-  },
-  enablePreview: {
-    type: Boolean,
-    default: true,
-  },
-  enableDownload: {
-    type: Boolean,
-    default: true,
-  },
-  loadCancelled: {
-    type: Boolean,
-    default: false,
-  },
-});
+);
 
-const fileTableHeaders = Object.freeze([
+const fileTableHeaders = Object.freeze<DataTableHeader[]>([
   { title: 'Name', key: 'name', sortable: true, align: 'start' },
   { title: 'Size', key: 'size', sortable: true, align: 'start' },
   { title: 'Actions', key: 'actions', sortable: false, align: 'end' },
 ]);
-const filesPerPageOptions = Object.freeze([10, 25, 50, { value: -1, title: 'All' }]);
+const filesPerPageOptions = Object.freeze<Array<number | { value: number; title: string }>>([
+  10,
+  25,
+  50,
+  { value: -1, title: 'All' },
+]);
 const FALLBACK_TEXT_EXT = ['txt', 'log', 'json', 'csv', 'ini', 'cfg', 'conf', 'htm', 'html', 'md', 'xml'];
 const FALLBACK_IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg'];
 const FALLBACK_AUDIO_EXT = ['mp3', 'wav', 'ogg', 'oga', 'opus', 'm4a', 'aac', 'flac', 'weba', 'webm'];
-const FILE_CATEGORY_LABELS = {
+const FILE_CATEGORY_LABELS: Record<FileCategory, string> = {
   all: 'All types',
   text: 'Text',
   image: 'Images',
   audio: 'Audio',
   other: 'Other',
 };
+const FILE_FILTER_CATEGORIES: Array<Exclude<FileCategory, 'all'>> = ['text', 'image', 'audio', 'other'];
 
-const emit = defineEmits([
-  'select-partition',
-  'refresh',
-  'backup',
-  'restore',
-  'download-file',
-  'view-file',
-  'validate-upload',
-  'upload-file',
-  'delete-file',
-  'format',
-  'save',
-]);
+const emit = defineEmits<{
+  (e: 'select-partition', value: PartitionId | null): void;
+  (e: 'refresh'): void;
+  (e: 'backup'): void;
+  (e: 'restore', file: File): void;
+  (e: 'download-file', name: string): void;
+  (e: 'view-file', name: string): void;
+  (e: 'validate-upload', file: File | null): void;
+  (e: 'upload-file', payload: FilesystemUploadPayload): void;
+  (e: 'delete-file', name: string): void;
+  (e: 'format'): void;
+  (e: 'save'): void;
+}>();
 
-const uploadFile = ref(null);
-const dropQueue = ref([]);
-const restoreInput = ref(null);
+const uploadFile = ref<File | null>(null);
+const dropQueue = ref<File[]>([]);
+const restoreInput = ref<HTMLInputElement | null>(null);
 const fileSearch = ref('');
 const filesPerPage = ref(25);
 const filesPage = ref(1);
-const fileTypeFilter = ref('all');
+const fileTypeFilter = ref<FileCategory>('all');
 const fsLabel = computed(() => (props.fsLabel && props.fsLabel.trim()) || 'SPIFFS');
-const selectedPartition = computed(() =>
+const selectedPartition = computed<FilesystemPartitionOption | null>(() =>
   props.partitions.find(partition => partition.id === props.selectedPartitionId) ?? null,
 );
 const partitionHeading = computed(() => {
@@ -316,27 +318,30 @@ const usagePercent = computed(() => {
 });
 const dragActive = ref(false);
 const autoUploadPending = ref(false);
-const fileFilterOptions = computed(() => {
-  const counts = props.files.reduce((acc, file) => {
+const fileFilterOptions = computed<FileFilterOption[]>(() => {
+  const counts: Partial<Record<Exclude<FileCategory, 'all'>, number>> = {};
+  for (const file of props.files) {
     const category = getFileCategory(file?.name);
-    acc[category] = (acc[category] || 0) + 1;
-    return acc;
-  }, {});
-  const options = [
+    counts[category] = (counts[category] ?? 0) + 1;
+  }
+
+  const options: FileFilterOption[] = [
     {
       value: 'all',
       label: `${FILE_CATEGORY_LABELS.all} (${props.files.length})`,
     },
   ];
-  for (const [key, label] of Object.entries(FILE_CATEGORY_LABELS)) {
-    if (key === 'all') continue;
-    if (counts[key]) {
+
+  for (const category of FILE_FILTER_CATEGORIES) {
+    const count = counts[category] ?? 0;
+    if (count) {
       options.push({
-        value: key,
-        label: `${label} (${counts[key]})`,
+        value: category,
+        label: `${FILE_CATEGORY_LABELS[category]} (${count})`,
       });
     }
   }
+
   return options;
 });
 
@@ -357,7 +362,7 @@ const filteredFiles = computed(() => {
 const filteredCountLabel = computed(() => {
   const total = props.files.length;
   const filtered = filteredFiles.value.length;
-  const pluralize = count => (count === 1 ? 'file' : 'files');
+  const pluralize = (count: number) => (count === 1 ? 'file' : 'files');
   if (!total) {
     return 'No files';
   }
@@ -376,11 +381,11 @@ const canUpload = computed(
 );
 
 watch(uploadFile, file => {
-  emit('validate-upload', file || null);
+  emit('validate-upload', file ?? null);
 });
 
 watch(
-  () => [uploadFile.value, props.uploadBlocked, autoUploadPending.value],
+  () => [uploadFile.value, props.uploadBlocked, autoUploadPending.value] as const,
   ([file, blocked, auto]) => {
     if (file && !blocked && auto) {
       submitUpload(true);
@@ -424,11 +429,12 @@ watch(fileFilterOptions, options => {
 });
 
 function submitUpload(auto = false) {
-  if (!uploadFile.value || props.uploadBlocked) return;
+  const file = uploadFile.value;
+  if (!file || props.uploadBlocked) return;
   if (auto) {
     autoUploadPending.value = false;
   }
-  emit('upload-file', { file: uploadFile.value });
+  emit('upload-file', { file });
   uploadFile.value = null;
   autoUploadPending.value = false;
   scheduleNextDropUpload();
@@ -438,35 +444,45 @@ function triggerRestore() {
   restoreInput.value?.click();
 }
 
-function handleRestoreFile(event) {
-  const [file] = event.target.files || [];
+function handleRestoreFile(event: Event) {
+  const input = event.target instanceof HTMLInputElement ? event.target : null;
+  const file = input?.files?.[0] ?? null;
   if (file) {
     emit('restore', file);
   }
-  event.target.value = '';
+  if (input) {
+    input.value = '';
+  }
 }
 
-function handleDragOver(event) {
+function handleDragOver(event: DragEvent) {
+  const transfer = event.dataTransfer;
   if (!canUpload.value) {
-    event.dataTransfer.dropEffect = 'none';
+    if (transfer) {
+      transfer.dropEffect = 'none';
+    }
     dragActive.value = false;
     return;
   }
-  event.dataTransfer.dropEffect = 'copy';
+  if (transfer) {
+    transfer.dropEffect = 'copy';
+  }
   dragActive.value = true;
 }
 
-function handleDragLeave(event) {
-  if (event.currentTarget && event.relatedTarget && event.currentTarget.contains(event.relatedTarget)) {
+function handleDragLeave(event: DragEvent) {
+  const current = event.currentTarget;
+  const related = event.relatedTarget;
+  if (current instanceof Node && related instanceof Node && current.contains(related)) {
     return;
   }
   dragActive.value = false;
 }
 
-function handleDrop(event) {
+function handleDrop(event: DragEvent) {
   dragActive.value = false;
   if (!canUpload.value) return;
-  const files = Array.from(event.dataTransfer?.files ?? []).filter(file => file instanceof File);
+  const files = Array.from(event.dataTransfer?.files ?? []).filter((file): file is File => file instanceof File);
   if (!files.length) return;
   dropQueue.value.push(...files);
   scheduleNextDropUpload();
@@ -484,40 +500,56 @@ function scheduleNextDropUpload() {
   autoUploadPending.value = true;
 }
 
-function formatSize(size) {
-  if (!Number.isFinite(size)) return '-';
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+function formatSize(size: unknown): string {
+  const value = typeof size === 'number' ? size : Number(size);
+  if (!Number.isFinite(value)) return '-';
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function unwrapItem(item) {
+function unwrapItem(item: unknown): FilesystemEntry {
   if (!item || typeof item !== 'object') {
     return {};
   }
-  if ('raw' in item && item.raw && typeof item.raw === 'object') {
-    return item.raw;
+  const raw = (item as DataTableSlotItem<FilesystemEntry>).raw;
+  if (raw && typeof raw === 'object') {
+    return raw;
   }
-  return item;
+  return item as FilesystemEntry;
 }
 
-function toPreviewInfo(value) {
+function isPreviewMode(value: unknown): value is FilePreviewMode {
+  return value === 'text' || value === 'image' || value === 'audio';
+}
+
+function toPreviewInfo(value: unknown): FilePreviewInfo | null {
   if (!value) {
     return null;
   }
   if (typeof value === 'string') {
-    return { mode: value };
+    return isPreviewMode(value) ? { mode: value } : null;
   }
   if (value === true) {
     return { mode: 'text' };
   }
   if (typeof value === 'object' && value.mode) {
-    return value;
+    const mode = (value as { mode?: unknown }).mode;
+    if (!isPreviewMode(mode)) {
+      return null;
+    }
+    const mime = (value as { mime?: unknown }).mime;
+    const ext = (value as { ext?: unknown }).ext;
+    return {
+      mode,
+      mime: typeof mime === 'string' ? mime : undefined,
+      ext: typeof ext === 'string' ? ext : undefined,
+    };
   }
   return null;
 }
 
-function getPreviewInfo(name) {
+function getPreviewInfo(name?: string): FilePreviewInfo | null {
   if (!name) {
     return null;
   }
@@ -544,7 +576,7 @@ function normalizeExtension(name = '') {
   return name.slice(idx + 1).toLowerCase();
 }
 
-function getFileCategory(name = '') {
+function getFileCategory(name = ''): Exclude<FileCategory, 'all'> {
   const info = getPreviewInfo(name);
   if (info?.mode === 'text') return 'text';
   if (info?.mode === 'image') return 'image';
@@ -556,11 +588,11 @@ function getFileCategory(name = '') {
   return 'other';
 }
 
-function isViewable(name) {
+function isViewable(name?: string): boolean {
   return Boolean(getPreviewInfo(name));
 }
 
-function previewIcon(name) {
+function previewIcon(name?: string): string {
   const info = getPreviewInfo(name);
   if (info?.mode === 'audio') {
     return 'mdi-headphones';
@@ -568,7 +600,7 @@ function previewIcon(name) {
   return 'mdi-eye';
 }
 
-function previewLabel(name) {
+function previewLabel(name?: string): string {
   const info = getPreviewInfo(name);
   if (info?.mode === 'audio') {
     return 'Listen';

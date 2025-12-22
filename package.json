@@ -2,7 +2,7 @@
   "name": "espconnect",
   "productName": "ESPConnect",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "description": "Browser-based control center for ESP32 and ESP8266 boards",
   "main": "electron/main.cjs",
@@ -36,9 +36,9 @@
     "@electron-forge/plugin-fuses": "^7.6.0",
     "@electron/fuses": "^1.8.0",
     "@vitejs/plugin-vue": "^6.0.1",
-    "electron": "^33.2.0",
+    "electron": "^39.2.7",
     "sass": "^1.80.0",
-    "vitest": "^3.2.4",
+    "vitest": "^4.0.16",
     "vite": "^7.1.12",
     "vite-plugin-vuetify": "^2.0.3"
   }

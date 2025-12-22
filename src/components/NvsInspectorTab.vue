@@ -6,7 +6,14 @@
 
     <v-card variant="tonal" prepend-icon="mdi-database-search">
       <template v-slot:title>
-        <span class="font-weight-black">NVS Inspector</span>
+        <div class="d-flex align-center gap-2 flex-wrap">
+          <span class="font-weight-black">NVS Inspector</span>
+          <v-tooltip text="Experimental feature: output may be incomplete or inaccurate." location="bottom">
+            <template #activator="{ props: tooltipProps }">
+              <v-chip v-bind="tooltipProps" color="warning" variant="tonal">Experimental</v-chip>
+            </template>
+          </v-tooltip>
+        </div>
       </template>
 
       <v-card-text class="d-flex flex-column gap-4">
@@ -80,7 +87,19 @@
             <template v-else>
               <v-card variant="tonal">
         <v-card-title class="d-flex align-center justify-space-between">
-          <span>Keys</span>
+          <div class="d-flex align-center gap-2 flex-wrap">
+            <span>Keys</span>
+            <v-chip
+              v-if="pageFilter !== null"
+              size="small"
+              color="secondary"
+              variant="tonal"
+              closable
+              @click:close="clearPageFilter"
+            >
+              Page p{{ pageFilter }}
+            </v-chip>
+          </div>
           <v-chip size="large" variant="outlined" color="primary">
             {{ filteredEntries.length.toLocaleString() }} shown
           </v-chip>
@@ -91,6 +110,8 @@
             <v-select
               v-model="namespaceFilter"
               :items="namespaceFilterOptions"
+              item-title="title"
+              item-value="value"
               density="comfortable"
               label="Namespace"
               variant="outlined"
@@ -154,7 +175,7 @@
               <span v-if="typeof unwrapItem(item).length === 'number'">
                 {{ unwrapItem(item).length.toLocaleString() }}
               </span>
-              <span v-else class="text-medium-emphasis">—</span>
+              <span v-else class="text-medium-emphasis">&mdash;</span>
             </template>
 
             <template #item.crcOk="{ item }">
@@ -162,7 +183,7 @@
               <v-chip v-else-if="unwrapItem(item).crcOk === false" size="small" color="error" variant="tonal"
                 >BAD</v-chip
               >
-              <span v-else class="text-medium-emphasis">—</span>
+              <span v-else class="text-medium-emphasis">&mdash;</span>
             </template>
 
             <!-- FIX: parser now uses `location`, not `raw` -->
@@ -170,14 +191,14 @@
               <span v-if="unwrapItem(item).location" class="text-caption">
                 <code>p{{ unwrapItem(item).location.pageIndex }}:e{{ unwrapItem(item).location.entryIndex }}</code>
               </span>
-              <span v-else class="text-medium-emphasis">—</span>
+              <span v-else class="text-medium-emphasis">&mdash;</span>
             </template>
 
             <template #item.issues="{ item }">
               <v-chip v-if="unwrapItem(item).warnings?.length" size="small" color="warning" variant="tonal">
                 {{ unwrapItem(item).warnings.length }}
               </v-chip>
-              <span v-else class="text-medium-emphasis">—</span>
+              <span v-else class="text-medium-emphasis">&mdash;</span>
             </template>
 
             <template #no-data>
@@ -249,6 +270,7 @@
                       <th class="text-start">State</th>
                       <th class="text-end">Seq</th>
                       <th class="text-center">Status</th>
+                      <th class="text-start">Map</th>
                       <th class="text-end">Errors</th>
                     </tr>
                   </thead>
@@ -274,6 +296,63 @@
                         >
                         <v-chip v-else-if="page.valid" size="small" color="success" variant="tonal">OK</v-chip>
                         <v-chip v-else size="small" color="error" variant="tonal">BAD</v-chip>
+                      </td>
+                      <td class="nvs-inspector__map-cell">
+                        <div class="nvs-inspector__map-widget">
+                          <div v-if="page.entryStates?.length === PAGE_ENTRY_COUNT" class="nvs-inspector__entry-map">
+                            <button
+                              v-for="(state, entryIndex) in page.entryStates"
+                              :key="entryIndex"
+                              type="button"
+                              class="nvs-inspector__entry-cell"
+                              :class="entryCellClass(state)"
+                              :title="entryCellTitle(entryIndex, state)"
+                              @click="handlePageMapClick(page.index)"
+                            />
+                          </div>
+                          <span v-else class="text-medium-emphasis">&mdash;</span>
+
+                          <v-tooltip
+                            location="bottom"
+                            content-class="nvs-inspector__map-tooltip"
+                            :text="pageMapTooltip(page, pageEntryCounts[page.index] ?? null)"
+                          >
+                            <template #activator="{ props: tooltipProps }">
+                              <div v-bind="tooltipProps" class="nvs-inspector__map-metrics">
+                                <div class="nvs-inspector__map-counts">
+                                  <v-chip size="x-small" color="success" variant="tonal">
+                                    W:{{ pageEntryCounts[page.index]?.written ?? '\u2014' }}
+                                  </v-chip>
+                                  <v-chip size="x-small" color="warning" variant="tonal">
+                                    E:{{ pageEntryCounts[page.index]?.erased ?? '\u2014' }}
+                                  </v-chip>
+                                  <v-chip size="x-small" color="grey-darken-1" variant="tonal">
+                                    O:{{ pageEntryCounts[page.index]?.empty ?? '\u2014' }}
+                                  </v-chip>
+                                  <v-chip
+                                    size="x-small"
+                                    color="error"
+                                    :variant="pageEntryCounts[page.index]?.illegal ? 'elevated' : 'outlined'"
+                                  >
+                                    I:{{ pageEntryCounts[page.index]?.illegal ?? '\u2014' }}
+                                  </v-chip>
+                                </div>
+
+                                <v-progress-linear
+                                  height="7"
+                                  rounded
+                                  :model-value="
+                                    pageEntryCounts[page.index]
+                                      ? (pageEntryCounts[page.index].written / PAGE_ENTRY_COUNT) * 100
+                                      : 0
+                                  "
+                                  :color="pageEntryCounts[page.index]?.illegal ? 'error' : 'success'"
+                                  class="nvs-inspector__map-bar"
+                                />
+                              </div>
+                            </template>
+                          </v-tooltip>
+                        </div>
                       </td>
                       <td class="text-end">
                         <v-chip v-if="page.errors.length" size="small" color="error" variant="tonal">
@@ -329,18 +408,36 @@ type NvsEntry = {
   warnings?: string[];
 };
 
+type NvsNamespaceInfo = {
+  id: number;
+  name: string;
+};
+
+type EntryStateLabel = 'EMPTY' | 'WRITTEN' | 'ERASED' | 'ILLEGAL';
+type NamespaceFilterValue = 'All' | number;
+type NamespaceFilterOption = { title: string; value: NamespaceFilterValue };
+
+type NvsPageEntryCounts = {
+  written: number;
+  erased: number;
+  empty: number;
+  illegal: number;
+};
+
 type NvsPage = {
   index: number;
   state: string;
   seq: number | null;
   valid: boolean;
   errors: string[];
+  entryStates?: EntryStateLabel[];
+  entryCounts?: NvsPageEntryCounts;
 };
 
 type NvsResult = {
   version: number;
   pages: NvsPage[];
-  namespaces: Array<unknown>;
+  namespaces: NvsNamespaceInfo[];
   entries: Array<NvsEntry>;
   warnings: string[];
   errors: string[];
@@ -360,6 +457,8 @@ const emit = defineEmits<{
   (e: 'select-partition', value: number | string | null): void;
   (e: 'read-nvs'): void;
 }>();
+
+const PAGE_ENTRY_COUNT = 126;
 
 type ResultTab = 'keys' | 'pages';
 const activeTab = ref<ResultTab>('pages');
@@ -388,7 +487,77 @@ watch(
   { immediate: true },
 );
 
-const namespaceFilter = ref('All');
+const pageFilter = ref<number | null>(null);
+watch(
+  () => props.result,
+  () => {
+    pageFilter.value = null;
+  },
+);
+
+const pageEntryCounts = computed<Record<number, NvsPageEntryCounts>>(() => {
+  const out: Record<number, NvsPageEntryCounts> = {};
+  const pages = props.result?.pages ?? [];
+  for (const page of pages) {
+    if (!page || typeof page.index !== 'number') continue;
+    if (page.entryCounts) {
+      out[page.index] = page.entryCounts;
+      continue;
+    }
+    const states = page.entryStates;
+    if (!Array.isArray(states) || states.length !== PAGE_ENTRY_COUNT) continue;
+    const counts: NvsPageEntryCounts = { written: 0, erased: 0, empty: 0, illegal: 0 };
+    for (const state of states) {
+      if (state === 'WRITTEN') counts.written += 1;
+      else if (state === 'ERASED') counts.erased += 1;
+      else if (state === 'EMPTY') counts.empty += 1;
+      else counts.illegal += 1;
+    }
+    out[page.index] = counts;
+  }
+  return out;
+});
+
+function clearPageFilter() {
+  pageFilter.value = null;
+}
+
+function handlePageMapClick(pageIndex: number) {
+  pageFilter.value = pageIndex;
+  activeTab.value = 'keys';
+}
+
+function entryCellClass(state: EntryStateLabel) {
+  return `nvs-inspector__entry-cell--${state.toLowerCase()}`;
+}
+
+function entryCellTitle(entryIndex: number, state: EntryStateLabel) {
+  const wordIndex = Math.floor(entryIndex / 16);
+  const bitOffset = (entryIndex % 16) * 2;
+  return `Entry #${entryIndex} (word ${wordIndex} / bits ${bitOffset}-${bitOffset + 1}): ${state}`;
+}
+
+function pageMapTooltip(page: NvsPage, counts: NvsPageEntryCounts | null) {
+  const lines: string[] = [`Page ${page.index} (${page.state})`];
+
+  if (counts) {
+    const percentUsed = (counts.written / PAGE_ENTRY_COUNT) * 100;
+    lines.push(`Written: ${counts.written} / ${PAGE_ENTRY_COUNT} (${percentUsed.toFixed(1)}%)`);
+    lines.push(`Erased: ${counts.erased}, Empty: ${counts.empty}, Illegal: ${counts.illegal}`);
+  } else {
+    lines.push('Entry map unavailable.');
+  }
+
+  const errorCount = page.errors?.length ?? 0;
+  if (errorCount > 0) {
+    lines.push(`Errors: ${errorCount}`);
+    if (page.errors[0]) lines.push(page.errors[0]);
+  }
+
+  return lines.join('\n');
+}
+
+const namespaceFilter = ref<NamespaceFilterValue>('All');
 const keyFilter = ref('');
 const typeFilter = ref('All');
 const valueFilter = ref('');
@@ -435,12 +604,31 @@ function unwrapItem(item: unknown) {
 }
 
 const namespaceFilterOptions = computed(() => {
-  const items = props.result?.entries ?? [];
-  const set = new Set<string>();
-  for (const entry of items) {
-    if (entry?.namespace) set.add(entry.namespace);
+  const byId = new Map<number, string>();
+
+  for (const ns of props.result?.namespaces ?? []) {
+    if (typeof ns?.id === 'number' && ns.name) byId.set(ns.id, ns.name);
   }
-  return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+
+  for (const entry of props.result?.entries ?? []) {
+    const nsIndex = entry.location?.nsIndex;
+    if (typeof nsIndex !== 'number') continue;
+    if (!byId.has(nsIndex) && entry.namespace) byId.set(nsIndex, entry.namespace);
+  }
+
+  const nameCounts = new Map<string, number>();
+  for (const name of byId.values()) {
+    nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+  }
+
+  const items: NamespaceFilterOption[] = Array.from(byId.entries())
+    .sort(([aId, aName], [bId, bName]) => aName.localeCompare(bName) || aId - bId)
+    .map(([id, name]) => ({
+      value: id,
+      title: (nameCounts.get(name) ?? 0) > 1 ? `${name} (#${id})` : name,
+    }));
+
+  return [{ title: 'All', value: 'All' as const }, ...items];
 });
 
 const typeFilterOptions = computed(() => {
@@ -460,6 +648,7 @@ const filteredEntries = computed(() => {
   const key = keyFilter.value.trim().toLowerCase();
   const type = typeFilter.value;
   const value = valueFilter.value.trim().toLowerCase();
+  const page = pageFilter.value;
 
   return (result.entries ?? [])
     .map((entry, idx) => ({
@@ -467,10 +656,11 @@ const filteredEntries = computed(() => {
       __key: `${entry.namespace}:${entry.key}:${entry.type}:${idx}`,
     }))
     .filter(entry => {
-      if (ns !== 'All' && entry.namespace !== ns) return false;
+      if (ns !== 'All' && entry.location?.nsIndex !== ns) return false;
       if (type !== 'All' && entry.type !== type) return false;
       if (key && !String(entry.key ?? '').toLowerCase().includes(key)) return false;
       if (value && !String(entry.valuePreview ?? '').toLowerCase().includes(value)) return false;
+      if (page !== null && entry.location?.pageIndex !== page) return false;
       return true;
     });
 });
@@ -533,5 +723,99 @@ const filteredEntries = computed(() => {
 
 .nvs-inspector__pages-summary :deep(.v-chip__content) {
   white-space: normal;
+}
+
+.nvs-inspector__map-cell {
+  vertical-align: top;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.nvs-inspector__map-widget {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.nvs-inspector__map-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+  cursor: help;
+  max-width: 220px;
+}
+
+.nvs-inspector__map-counts {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.nvs-inspector__map-bar {
+  max-width: 160px;
+}
+
+:global(.nvs-inspector__map-tooltip) {
+  white-space: pre-line;
+  max-width: 320px;
+}
+
+.nvs-inspector__entry-map {
+  --cell-size: 7px;
+  display: grid;
+  grid-template-columns: repeat(18, var(--cell-size));
+  gap: 2px;
+  align-content: start;
+  justify-content: start;
+  padding: 4px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--v-theme-on-surface) 7%, transparent);
+  width: fit-content;
+}
+
+@media (max-width: 900px) {
+  .nvs-inspector__entry-map {
+    --cell-size: 6px;
+    gap: 2px;
+  }
+}
+
+.nvs-inspector__entry-cell {
+  width: var(--cell-size);
+  height: var(--cell-size);
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--v-theme-on-surface) 10%, transparent);
+}
+
+.nvs-inspector__entry-cell:hover {
+  filter: brightness(1.12);
+  outline: 1px solid color-mix(in srgb, var(--v-theme-on-surface) 26%, transparent);
+  outline-offset: 1px;
+}
+
+.nvs-inspector__entry-cell:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--v-theme-primary) 75%, transparent);
+  outline-offset: 2px;
+}
+
+.nvs-inspector__entry-cell--written {
+  background: color-mix(in srgb, var(--v-theme-success) 76%, transparent);
+}
+
+.nvs-inspector__entry-cell--erased {
+  background: color-mix(in srgb, var(--v-theme-warning) 76%, transparent);
+}
+
+.nvs-inspector__entry-cell--empty {
+  background: color-mix(in srgb, var(--v-theme-on-surface) 12%, transparent);
+}
+
+.nvs-inspector__entry-cell--illegal {
+  background: color-mix(in srgb, var(--v-theme-error) 76%, transparent);
 }
 </style>

@@ -115,34 +115,31 @@
 
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, toRefs } from 'vue';
+import type { FormattedPartitionRow, PartitionSegment, UnusedFlashSummary } from '../types/partitions';
 
-const props = defineProps({
-  partitionSegments: {
-    type: Array,
-    default: () => [],
+const props = withDefaults(
+  defineProps<{
+    partitionSegments?: PartitionSegment[];
+    formattedPartitions?: FormattedPartitionRow[];
+    unusedSummary?: UnusedFlashSummary | null;
+    flashSizeLabel?: string | null;
+  }>(),
+  {
+    partitionSegments: () => [],
+    formattedPartitions: () => [],
+    unusedSummary: null,
+    flashSizeLabel: '',
   },
-  formattedPartitions: {
-    type: Array,
-    default: () => [],
-  },
-  unusedSummary: {
-    type: Object,
-    default: null,
-  },
-  flashSizeLabel: {
-    type: String,
-    default: '',
-  },
-});
+);
 
 const { partitionSegments, formattedPartitions, unusedSummary, flashSizeLabel } = toRefs(props);
 
 const showUnusedAlert = computed(() => Boolean(unusedSummary.value));
 const unusedReadable = computed(() => unusedSummary.value?.readable ?? '');
 const unusedBytesDisplay = computed(() =>
-  unusedSummary.value?.bytes != null ? unusedSummary.value.bytes.toLocaleString() : ''
+  unusedSummary.value?.bytes != null ? unusedSummary.value.bytes.toLocaleString() : '',
 );
 const partitionCardTitle = computed(() => {
   const label = flashSizeLabel.value?.trim();

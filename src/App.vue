@@ -679,32 +679,22 @@ import { FACT_GROUP_CONFIG, FACT_ICONS } from './constants/deviceFacts';
 import { findChipDocs } from './constants/chipDocsLinks';
 import { PWM_TABLE } from './utils/pwm-capabilities-table';
 import { parseNvsPartition, type NvsParseResult } from './lib/nvs/nvsParser';
+import type { AppPartitionMetadata } from './types/app-partitions';
+import type { DeviceDetails } from './types/device-details';
+import type { FilePreviewInfo } from './types/filesystem';
+import type { LittlefsDiskVersionFormatter, LittlefsEntry, LittlefsEntryType, LittlefsUploadPayload } from './types/littlefs';
+import type { FormattedPartitionRow, PartitionSegment, UnusedFlashSummary } from './types/partitions';
+import type {
+  AlertType,
+  PartitionOptionValue,
+  ProgressDialogState,
+  RegisterOption,
+  RegisterReference,
+} from './types/flash-firmware';
 
 let littlefsModulePromise = null;
 let fatfsModulePromise = null;
-const littlefsFormatDiskVersion = ref<((version: number) => string) | null>(null);
-
-// Sort device facts using the preferred display order, then fall back to name sorting.
-// function sortFacts(facts) {
-//   return [...facts].sort((a, b) => {
-//     const orderA = FACT_DISPLAY_ORDER.indexOf(a.label);
-//     const orderB = FACT_DISPLAY_ORDER.indexOf(b.label);
-//     const hasOrderA = orderA !== -1;
-//     const hasOrderB = orderB !== -1;
-
-//     if (hasOrderA && hasOrderB) {
-//       if (orderA !== orderB) {
-//         return orderA - orderB;
-//       }
-//       return a.label.localeCompare(b.label);
-//     }
-
-//     if (hasOrderA) return -1;
-//     if (hasOrderB) return 1;
-
-//     return a.label.localeCompare(b.label);
-//   });
-// }
+const littlefsFormatDiskVersion = ref<LittlefsDiskVersionFormatter | null>(null);
 
 // Lazy-load and cache the LittleFS WASM module.
 async function loadLittlefsModule() {
@@ -790,15 +780,25 @@ async function loadFatfsModule() {
 }
 
 // Normalize LittleFS entry objects and paths into a consistent structure.
-function normalizeLittlefsEntries(entries, basePath = '/') {
+function normalizeLittlefsEntries(entries: unknown, basePath = '/'): LittlefsEntry[] {
   if (!Array.isArray(entries)) {
     return [];
   }
   const base = normalizeFsPath(basePath || '/');
   const baseName = base.split('/').filter(Boolean).pop() || '';
+
+  type RawLittlefsEntry = {
+    path?: unknown;
+    name?: unknown;
+    size?: unknown;
+    isDirectory?: unknown;
+    type?: unknown;
+  };
+
   return entries
     .map(entry => {
-      const rawPath = (entry?.path ?? entry?.name ?? '').toString();
+      const rawEntry = entry as RawLittlefsEntry | null | undefined;
+      const rawPath = String(rawEntry?.path ?? rawEntry?.name ?? '');
       let path = rawPath;
       if (!path.startsWith('/')) {
         const strippedBase = base.replace(/^\//, '');
@@ -820,15 +820,16 @@ function normalizeLittlefsEntries(entries, basePath = '/') {
       }
       const segments = path.split('/').filter(Boolean);
       const name = segments[segments.length - 1] || '';
-      const isDir = entry?.isDirectory === true || entry?.type === 'dir';
+      const isDir = rawEntry?.isDirectory === true || rawEntry?.type === 'dir';
+      const type: LittlefsEntryType = isDir ? 'dir' : 'file';
       return {
         name,
         path,
-        type: isDir ? 'dir' : 'file',
-        size: Number(entry?.size ?? 0) || 0,
+        type,
+        size: Number(rawEntry?.size ?? 0) || 0,
       };
     })
-    .filter(Boolean);
+    .filter((entry): entry is LittlefsEntry => Boolean(entry));
 }
 
 // Detect common signatures that indicate an unformatted LittleFS image.
@@ -1126,8 +1127,8 @@ async function handleLittlefsBackup() {
     const stampedName = `${safeBase}_${formatBackupTimestamp()}.bin`;
     const cachedImage =
       littlefsState.lastReadImage &&
-      littlefsState.lastReadOffset === partition.offset &&
-      littlefsState.lastReadSize === partition.size
+        littlefsState.lastReadOffset === partition.offset &&
+        littlefsState.lastReadSize === partition.size
         ? littlefsState.lastReadImage
         : null;
     if (cachedImage) {
@@ -1233,7 +1234,7 @@ async function handleLittlefsRestore(file) {
 }
 
 // Validate a selected file before queueing a LittleFS upload.
-function handleLittlefsUploadSelection(file) {
+function handleLittlefsUploadSelection(file: File | null) {
   if (!file || !littlefsState.client) {
     littlefsState.uploadBlocked = false;
     littlefsState.uploadBlockedReason = '';
@@ -1241,16 +1242,23 @@ function handleLittlefsUploadSelection(file) {
   }
   const targetPath = joinFsPath(littlefsState.currentPath || '/', file.name);
   const partition = littlefsSelectedPartition.value;
-  const partitionSize = partition?.size ?? littlefsState.blockSize * littlefsState.blockCount;
+  updateLittlefsUsage(partition);
+  const partitionSize =
+    littlefsState.usage?.capacityBytes ?? partition?.size ?? littlefsState.blockSize * littlefsState.blockCount;
   const usageSource = littlefsState.allFiles?.length ? littlefsState.allFiles : littlefsState.files;
-  const usedBytes = littlefsEstimateUsage(usageSource);
+  const usedBytes = littlefsState.usage?.usedBytes ?? littlefsEstimateUsage(usageSource);
   const existingEntry = usageSource.find(entry => entry.path === targetPath);
   const existingFootprint =
     existingEntry?.type === 'dir'
       ? littlefsState.blockSize || existingEntry?.size || 0
       : littlefsEstimateFileFootprint(existingEntry?.size ?? 0);
   const incomingFootprint = littlefsEstimateFileFootprint(file.size);
-  const availableBytes = partitionSize ? partitionSize - usedBytes + existingFootprint : 0;
+  const availableBytes =
+    partitionSize && typeof littlefsState.usage?.freeBytes === 'number'
+      ? littlefsState.usage.freeBytes + existingFootprint
+      : partitionSize
+        ? partitionSize - usedBytes + existingFootprint
+        : 0;
   if (partitionSize && incomingFootprint > availableBytes) {
     const message =
       'Not enough LittleFS space for this file. Delete files or format the partition, then try again.';
@@ -1266,15 +1274,15 @@ function handleLittlefsUploadSelection(file) {
 }
 
 // Queue a LittleFS upload while serializing concurrent writes.
-async function handleLittlefsUpload(payload) {
+async function handleLittlefsUpload(payload: LittlefsUploadPayload) {
   // serialize uploads to avoid parallel free-space races
   littlefsUploadQueue = littlefsUploadQueue.then(() => performLittlefsUpload(payload));
   return littlefsUploadQueue;
 }
 
 // Perform a LittleFS upload or folder creation with size and conflict checks.
-async function performLittlefsUpload(payload) {
-  const { file, path, isDir } = payload || {};
+async function performLittlefsUpload(payload: LittlefsUploadPayload) {
+  const { file, path, isDir } = payload;
   if (littlefsState.uploadBlocked) {
     console.warn('[ESPConnect-LittleFS] upload skipped because blocked', {
       path,
@@ -1296,12 +1304,17 @@ async function performLittlefsUpload(payload) {
     return;
   }
   const partition = littlefsSelectedPartition.value;
-  const partitionSize = partition?.size ?? littlefsState.blockSize * littlefsState.blockCount;
+  updateLittlefsUsage(partition);
+  const partitionSize =
+    littlefsState.usage?.capacityBytes ?? partition?.size ?? littlefsState.blockSize * littlefsState.blockCount;
   const usageSource = littlefsState.allFiles?.length ? littlefsState.allFiles : littlefsState.files;
-  const usedBytes = littlefsEstimateUsage(usageSource);
+  const usedBytes = littlefsState.usage?.usedBytes ?? littlefsEstimateUsage(usageSource);
   let workingFreeBytes =
-    littlefsState.usage?.freeBytes ??
-    (partitionSize ? Math.max(partitionSize - usedBytes, 0) : Number.POSITIVE_INFINITY);
+    typeof littlefsState.usage?.freeBytes === 'number'
+      ? littlefsState.usage.freeBytes
+      : partitionSize
+        ? Math.max(partitionSize - usedBytes, 0)
+        : Number.POSITIVE_INFINITY;
   const derivedIsDir = isDir === true || (!file && !!path);
   if (derivedIsDir && !file && path) {
     const targetDir = joinFsPath(littlefsState.currentPath || '/', path);
@@ -1405,7 +1418,15 @@ async function performLittlefsUpload(payload) {
       error,
     });
     const msg = formatErrorMessage(error);
-    const spaceError = msg.toLowerCase().includes('no more free space') || msg.toLowerCase().includes('unable to add file');
+    const code = typeof error?.code === 'number' ? error.code : null;
+    const normalized = msg.toLowerCase();
+    const spaceError =
+      code === -28 ||
+      normalized.includes('no space') ||
+      normalized.includes('no more free space') ||
+      normalized.includes('unable to add file') ||
+      normalized.includes('nospace') ||
+      normalized.includes('enospc');
     if (spaceError) {
       littlefsState.uploadBlocked = true;
       littlefsState.uploadBlockedReason = msg;
@@ -1893,8 +1914,8 @@ async function handleFatfsBackup() {
     const stampedName = `${safeBase}_${formatBackupTimestamp()}.bin`;
     const cachedImage =
       fatfsState.lastReadImage &&
-      fatfsState.lastReadOffset === partition.offset &&
-      fatfsState.lastReadSize === partition.size
+        fatfsState.lastReadOffset === partition.offset &&
+        fatfsState.lastReadSize === partition.size
         ? fatfsState.lastReadImage
         : null;
     if (cachedImage) {
@@ -2484,18 +2505,22 @@ function resetLittlefsState() {
 
 // Calculate LittleFS usage based on current entries.
 function updateLittlefsUsage(partition = littlefsSelectedPartition.value) {
-  const partitionSize = partition?.size ?? 0;
-  const capacityBytes =
-    littlefsState.blockSize && littlefsState.blockCount
-      ? littlefsState.blockSize * littlefsState.blockCount
-      : partitionSize;
-  const source = littlefsState.allFiles?.length ? littlefsState.allFiles : littlefsState.files;
-  const usedBytes = littlefsEstimateUsage(source);
-  littlefsState.usage = {
-    capacityBytes,
-    usedBytes,
-    freeBytes: Math.max(capacityBytes - usedBytes, 0),
-  };
+  if (littlefsState.client && typeof littlefsState.client.getUsage === 'function') {
+    littlefsState.usage = littlefsState.client.getUsage();
+  } else {
+    const partitionSize = partition?.size ?? 0;
+    const capacityBytes =
+      littlefsState.blockSize && littlefsState.blockCount
+        ? littlefsState.blockSize * littlefsState.blockCount
+        : partitionSize;
+    const source = littlefsState.allFiles?.length ? littlefsState.allFiles : littlefsState.files;
+    const usedBytes = littlefsEstimateUsage(source);
+    littlefsState.usage = {
+      capacityBytes,
+      usedBytes,
+      freeBytes: Math.max(capacityBytes - usedBytes, 0),
+    };
+  }
   // Update disk version from client if available
   if (littlefsState.client?.getDiskVersion) {
     littlefsState.diskVersion = littlefsState.client.getDiskVersion();
@@ -2555,7 +2580,7 @@ function updateFatfsUsage(partition = fatfsSelectedPartition.value) {
 }
 
 // Resolve how to preview a SPIFFS/LittleFS/FATFS file by extension.
-function resolveSpiffsViewInfo(name = '') {
+function resolveSpiffsViewInfo(name = ''): FilePreviewInfo | null {
   if (!name) return null;
   const dotIndex = name.lastIndexOf('.');
   if (dotIndex === -1) return null;
@@ -2845,8 +2870,8 @@ async function handleSpiffsBackup() {
     const stampedName = `${safeBase}_${formatBackupTimestamp()}.bin`;
     const cachedImage =
       spiffsState.lastReadImage &&
-      spiffsState.lastReadOffset === partition.offset &&
-      spiffsState.lastReadSize === partition.size
+        spiffsState.lastReadOffset === partition.offset &&
+        spiffsState.lastReadSize === partition.size
         ? spiffsState.lastReadImage
         : null;
     if (cachedImage) {
@@ -3549,23 +3574,23 @@ const connected = ref(false);
 const busy = ref(false);
 const flashInProgress = ref(false);
 const flashProgress = ref(0);
-const flashProgressDialog = reactive({ visible: false, value: 0, label: '' });
+const flashProgressDialog = reactive<ProgressDialogState>({ visible: false, value: 0, label: '' });
 const flashCancelRequested = ref(false);
 const selectedBaud = ref<BaudRate>(DEFAULT_FLASH_BAUD as BaudRate);
 const baudrateOptions = SUPPORTED_BAUDRATES;
 const flashOffset = ref('0x0');
 const eraseFlash = ref(false);
 const higherBaudrateAvailable = ref(false);
-const selectedPreset = ref(null);
-const selectedPartitionDownload = ref(null);
-const integrityPartition = ref(null);
+const selectedPreset = ref<string | number | null>(null);
+const selectedPartitionDownload = ref<PartitionOptionValue | null>(null);
+const integrityPartition = ref<PartitionOptionValue | null>(null);
 const currentBaud = ref(DEFAULT_FLASH_BAUD);
 const lastFlashBaud = ref(DEFAULT_FLASH_BAUD);
 const previousMonitorBaud = ref(DEFAULT_FLASH_BAUD);
 let suspendBaudWatcher = false;
 const baudChangeBusy = ref(false);
 const maintenanceBusy = ref(false);
-const downloadProgress = reactive({ visible: false, value: 0, label: '' });
+const downloadProgress = reactive<ProgressDialogState>({ visible: false, value: 0, label: '' });
 const downloadCancelRequested = ref(false);
 const {
   spiffsState,
@@ -3608,11 +3633,11 @@ const nvsState = reactive<{
 });
 const registerAddress = ref('0x0');
 const registerValue = ref('');
-const registerReadResult = ref(null);
-const registerStatus = ref(null);
-const registerStatusType = ref('info');
-const registerOptions = ref([]);
-const registerReference = ref(null);
+const registerReadResult = ref<string | null>(null);
+const registerStatus = ref<string | null>(null);
+const registerStatusType = ref<AlertType>('info');
+const registerOptions = ref<RegisterOption[]>([]);
+const registerReference = ref<RegisterReference | null>(null);
 const registerOptionLookup = computed(() => {
   const map = new Map();
   for (const option of registerOptions.value) {
@@ -3628,14 +3653,14 @@ const registerOptionLookup = computed(() => {
 });
 const md5Offset = ref('0x0');
 const md5Length = ref('');
-const md5Result = ref(null);
-const md5Status = ref(null);
-const md5StatusType = ref('info');
+const md5Result = ref<string | null>(null);
+const md5Status = ref<string | null>(null);
+const md5StatusType = ref<AlertType>('info');
 const flashReadOffset = ref('0x0');
 const flashReadLength = ref('');
-const flashReadStatus = ref(null);
-const flashReadStatusType = ref('info');
-const appPartitions = ref([]);
+const flashReadStatus = ref<string | null>(null);
+const flashReadStatusType = ref<AlertType>('info');
+const appPartitions = ref<AppPartitionMetadata[]>([]);
 const appMetadataLoading = ref(false);
 const appMetadataError = ref(null);
 const activeAppSlotId = ref(null);
@@ -3772,7 +3797,7 @@ const transport = ref<CompatibleTransport | null>(null);
 const loader = ref<CompatibleLoader | null>(null);
 const firmwareBuffer = ref(null);
 const firmwareName = ref('');
-const chipDetails = ref(null);
+const chipDetails = ref<DeviceDetails | null>(null);
 const partitionFlashSizeLabel = computed(() => chipDetails.value?.flashSize ?? null);
 const partitionTable = ref([]);
 const activeTab = ref('info');
@@ -3781,17 +3806,17 @@ const navigationItems = computed(() => [
   { title: 'Device Info', value: 'info', icon: 'mdi-information-outline', disabled: false },
   { title: 'Partitions', value: 'partitions', icon: 'mdi-table', disabled: !connected.value },
   {
+    title: 'Apps',
+    value: 'apps',
+    icon: 'mdi-application',
+    disabled: !connected.value || maintenanceNavigationLocked.value,
+  },
+  {
     title: 'NVS Inspector',
     value: 'nvs',
     icon: 'mdi-database-search',
     disabled:
       !connected.value || !nvsAvailable.value || maintenanceNavigationLocked.value,
-  },
-  {
-    title: 'Apps',
-    value: 'apps',
-    icon: 'mdi-application',
-    disabled: !connected.value || maintenanceNavigationLocked.value,
   },
   {
     title: 'SPIFFS Tools',
@@ -4593,11 +4618,11 @@ const RESERVED_SEGMENTS = [
 
 const MIN_SEGMENT_PERCENT = 1; // ensure tiny partitions remain hoverable in the map
 
-const partitionSegments = computed(() => {
+const partitionSegments = computed<PartitionSegment[]>(() => {
   if (!connected.value) {
     return [];
   }
-  if(partitionTable.value.length == 0) {
+  if (partitionTable.value.length == 0) {
     return [];
   }
   const sortedPartitions = [...partitionTable.value].sort((a, b) => a.offset - b.offset);
@@ -4824,7 +4849,7 @@ const totalUnusedFlashBytes = computed(() =>
     .reduce((sum, segment) => sum + (segment.size || 0), 0)
 );
 
-const unusedFlashSummary = computed(() => {
+const unusedFlashSummary = computed<UnusedFlashSummary | null>(() => {
   const bytes = totalUnusedFlashBytes.value;
   if (!bytes || bytes < UNUSED_FLASH_ALERT_THRESHOLD) {
     return null;
@@ -4836,7 +4861,7 @@ const unusedFlashSummary = computed(() => {
   };
 });
 
-const formattedPartitions = computed(() => {
+const formattedPartitions = computed<FormattedPartitionRow[]>(() => {
   const segmentByOffset = new Map();
   for (const segment of partitionSegments.value) {
     if (!segment.isUnused && !segment.isReserved) {
@@ -5569,12 +5594,12 @@ async function connect() {
     }
 
     if (
-      typeof  metadata.blockVersionMajor === 'number' &&
-      !Number.isNaN( metadata.blockVersionMajor) &&
-      typeof  metadata.blockVersionMinor === 'number' &&
-      !Number.isNaN( metadata.blockVersionMinor)
+      typeof metadata.blockVersionMajor === 'number' &&
+      !Number.isNaN(metadata.blockVersionMajor) &&
+      typeof metadata.blockVersionMinor === 'number' &&
+      !Number.isNaN(metadata.blockVersionMinor)
     ) {
-      pushFact('eFuse Block Version', `v${ metadata.blockVersionMajor}.${ metadata.blockVersionMinor}`);
+      pushFact('eFuse Block Version', `v${metadata.blockVersionMajor}.${metadata.blockVersionMinor}`);
     }
 
     const docs = esp.chipName ? findChipDocs(esp.chipName) : undefined;
