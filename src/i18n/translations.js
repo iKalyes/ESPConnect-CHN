@@ -255,7 +255,7 @@ export const translations = {
     '固件工具仅供高级用户使用。写入或擦除 Flash 可能会永久删除数据或导致微控制器无法启动。请在操作前仔细检查设置。',
   'Download Selected Partition': '下载选定分区',
   'Download All Partitions': '下载所有分区',
-  'Download Used Flash': '下载已用 Flash',
+  'Download Flash Backup': '下载 Flash 备份',
   'Start offset': '起始偏移地址',
   'Length (bytes)': '长度（字节）',
   'Download Flash Region': '下载 Flash 区域',
@@ -345,10 +345,6 @@ export const translations = {
     '串口终端自动以 115200 bps 运行以确保可靠输出。烧录使用工具栏中选择的波特率。',
   'Starting the serial monitor resets the board into normal firmware mode so you can view UART output. Stopping the serial monitor automatically re-enters bootloader (stub) mode for maintenance (flash, partition tools, etc.).':
     '启动串口监视器会将开发板复位到正常固件模式以查看 UART 输出。停止串口监视器会自动重新进入 Bootloader（stub）维护模式（刷写、分区工具等）。',
-  'Starting the serial monitor closes the bootloader connection, resets the board into normal firmware mode, and releases the USB port so the browser stops access once you exit. Reconnect with the main':
-    '启动串口终端将关闭 Bootloader 连接，将开发板重置为正常固件模式，并释放 USB 端口，退出后浏览器将停止访问。请使用主',
-  'button before running maintenance (flash, partition tools, etc.).':
-    '按钮重新连接后再运行维护操作（烧录、分区工具等）。',
 
   // ==================== OTA 应用页面 ====================
   'Application Slots': '应用分区',
@@ -454,6 +450,9 @@ export const translations = {
   'Restoring LittleFS': '正在恢复 LittleFS',
   'Preparing backup...': '正在准备备份...',
   'Writing LittleFS image...': '正在写入 LittleFS 镜像...',
+  'Write LittleFS to Flash': '写入 LittleFS 到 Flash',
+  'Format LittleFS': '格式化 LittleFS',
+  'Erase all files from the LittleFS image? You must Save to apply.': '删除 LittleFS 镜像中的所有文件？需要保存才能生效。',
   
   // FATFS 对话框
   'FATFS Backup': 'FATFS 备份',
@@ -461,6 +460,9 @@ export const translations = {
   'Saving FATFS': '正在保存 FATFS',
   'Restoring FATFS': '正在恢复 FATFS',
   'Writing FATFS image...': '正在写入 FATFS 镜像...',
+  'Write FATFS to Flash': '写入 FATFS 到 Flash',
+  'Format FATFS': '格式化 FATFS',
+  'Erase all files from the FATFS image? You must Save to apply.': '删除 FATFS 镜像中的所有文件？需要保存才能生效。',
   
   // SPIFFS 对话框
   'SPIFFS Backup': 'SPIFFS 备份',
@@ -469,6 +471,11 @@ export const translations = {
   'Restoring SPIFFS': '正在恢复 SPIFFS',
   'Writing SPIFFS image...': '正在写入 SPIFFS 镜像...',
   'Reading SPIFFS...': '正在读取 SPIFFS...',
+  'Write SPIFFS to Flash': '写入 SPIFFS 到 Flash',
+  'Write these changes to flash now?': '立即将这些更改写入 Flash？',
+  'Format SPIFFS': '格式化 SPIFFS',
+  'Erase all files from the SPIFFS image? You must Save to apply.': '删除 SPIFFS 镜像中的所有文件？需要保存才能生效。',
+  'No file-level changes detected (still writing updated image).': '未检测到文件级别更改（仍会写入更新的镜像）。',
   
   // 通用进度对话框
   'Reading partition data...': '正在读取分区数据...',
@@ -558,6 +565,28 @@ export const translations = {
  * 格式: { pattern: RegExp, replacement: string | function }
  */
 export const regexTranslations = [
+  // ==================== 文件系统写入确认框 ====================
+  // "Added: filename.txt (10.4 KB), filename2.png (201.2 KB)" -> "新增: filename.txt (10.4 KB), filename2.png (201.2 KB)"
+  {
+    pattern: /^Added:\s*(.+)$/,
+    replacement: '新增: $1'
+  },
+  // "Modified: filename.txt (10.4 KB)" -> "修改: filename.txt (10.4 KB)"
+  {
+    pattern: /^Modified:\s*(.+)$/,
+    replacement: '修改: $1'
+  },
+  // "Removed: filename.txt" -> "移除: filename.txt"
+  {
+    pattern: /^Removed:\s*(.+)$/,
+    replacement: '移除: $1'
+  },
+  // "Deleted: filename.txt" -> "删除: filename.txt"
+  {
+    pattern: /^Deleted:\s*(.+)$/,
+    replacement: '删除: $1'
+  },
+  
   // 示例: "3 capabilities" -> "3 项功能"
   {
     pattern: /^(\d+)\s+capabilities$/,

@@ -64,6 +64,37 @@ function translateText(text) {
     }
   }
 
+  // 如果文本包含换行符，尝试分行翻译
+  if (trimmed.includes('\n')) {
+    const lines = text.split('\n');
+    let hasTranslation = false;
+    const translatedLines = lines.map(line => {
+      const lineTrimmed = line.trim();
+      if (!lineTrimmed) return line;
+      
+      // 精确匹配
+      if (translations[lineTrimmed]) {
+        hasTranslation = true;
+        return line.replace(lineTrimmed, translations[lineTrimmed]);
+      }
+      
+      // 正则匹配
+      for (const rule of regexTranslations) {
+        if (rule.pattern.test(lineTrimmed)) {
+          hasTranslation = true;
+          const translated = lineTrimmed.replace(rule.pattern, rule.replacement);
+          return line.replace(lineTrimmed, translated);
+        }
+      }
+      
+      return line;
+    });
+    
+    if (hasTranslation) {
+      return translatedLines.join('\n');
+    }
+  }
+
   return text;
 }
 
@@ -205,6 +236,25 @@ function reverseTranslateText(text) {
   const offsetSizeMatch = trimmed.match(/^偏移\s+(0x[0-9a-fA-F]+)\s*•\s*大小\s+(.+)$/);
   if (offsetSizeMatch) {
     return text.replace(trimmed, `Offset ${offsetSizeMatch[1]} • Size ${offsetSizeMatch[2]}`);
+  }
+
+  // ==================== 文件系统写入确认框反向翻译 ====================
+  // "新增: filename.txt (10.4 KB)" -> "Added: filename.txt (10.4 KB)"
+  const addedMatch = trimmed.match(/^新增:\s*(.+)$/);
+  if (addedMatch) {
+    return text.replace(trimmed, `Added: ${addedMatch[1]}`);
+  }
+  
+  // "修改: filename.txt (10.4 KB)" -> "Modified: filename.txt (10.4 KB)"
+  const modifiedMatch = trimmed.match(/^修改:\s*(.+)$/);
+  if (modifiedMatch) {
+    return text.replace(trimmed, `Modified: ${modifiedMatch[1]}`);
+  }
+  
+  // "移除: filename.txt" -> "Removed: filename.txt"
+  const removedMatch = trimmed.match(/^移除:\s*(.+)$/);
+  if (removedMatch) {
+    return text.replace(trimmed, `Removed: ${removedMatch[1]}`);
   }
 
   // "已使用 45%（1.2 MB / 2.8 MB）" -> "Used 45% (1.2 MB / 2.8 MB)"
